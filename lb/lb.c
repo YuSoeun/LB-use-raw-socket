@@ -202,11 +202,14 @@ static void *get_resource(void * arg) {
     }
 }
 
-int is_in_server_list(struct server_info server, struct sockaddr_in addr)
+int is_in_server_list(struct server_info server, uint32_t addr)
 {
     for (int i = 0; i < SERVER_NUM; i++) {
-        if (server_list)
+        if (server_list[i]->addr == addr) {
+            return 1;
+        }
     }
+    return 0;
 }
 
 // struct server_info select_server(int algo) {
