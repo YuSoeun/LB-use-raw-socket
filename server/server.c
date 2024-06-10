@@ -4,6 +4,9 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/sysinfo.h>
+#include <sys/times.h>
+#include "cpu.h"
 
 #define BUF_SIZE 1024
 void error_handling(char *message);
@@ -11,13 +14,16 @@ void error_handling(char *message);
 int main(int argc, char *argv[])
 {
 	int serv_sock, lb_sock;
-	char message[BUF_SIZE];
+	char message[BUF_SIZE] = "정보를 보내겠다.";
 	int str_len, i;
 	int option = 1;
 	
 	struct sockaddr_in serv_adr;
 	struct sockaddr_in lb_adr;
 	socklen_t lb_adr_sz;
+	struct sysinfo info;
+
+	CpuUsage prev, curr;
 	
 	if (argc != 2) {
 		printf("Usage : %s <port>\n", argv[0]);
@@ -51,18 +57,29 @@ int main(int argc, char *argv[])
 	
 	// get resource 알고리즘을 사용하는 LB인지 받기
 	int is_get_resource = 0;
-	if ((str_len = read(lb_sock, is_get_resource, sizeof(int))) == 0) {
+	if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
 		perror("read failed in get resource");
 	}
+	printf("is_get_resource %d \n", is_get_resource);
 	
 	while (1) {
 		// resource 정보 보내기
-		write(1, message, str_len);
-		sleep(1000);
+		sysinfo(&info);
 
+		get_cpu_usage(&prev);
+		sleep(1); // 1초 대기 후 다시 측정
+		get_cpu_usage(&curr);
+
+		double cpu_usage = calculate_cpu_usage(&prev, &curr);
+		double ram_usage = (double)(info.totalram-info.freeram)/(double)info.totalram * 100.0;
+		printf("cpu: %.2f%%\n", cpu_usage);
+		printf("mem: %.2f%%\n", ram_usage);
+		
 		if (is_get_resource) {
-			write(1, message, str_len);
+			write(lb_sock, &cpu_usage, sizeof(double));
+			write(lb_sock, &ram_usage, sizeof(double));
 		}
+		sleep(10);
 	}
 
 	close(lb_sock);

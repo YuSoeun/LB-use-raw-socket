@@ -23,9 +23,9 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-    unsigned long lb_addr = inet_addr(argv[0]);
-    unsigned short lb_port = htons(atoi(argv[1]));
-    int algo = (argv[2][0] - '0');
+    unsigned long lb_addr = inet_addr(argv[1]);
+    unsigned short lb_port = htons(atoi(argv[2]));
+    int algo = (argv[3][0] - '0');
 
     sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
 	if (sock == -1) {
@@ -47,31 +47,31 @@ int main(int argc, char *argv[]) {
     connect_with_servers();
 
     // 서버의 리소스 정보를 받아오는 쓰레드 생성
-    if (RESOURCE_BASED) {
-        pthread_t thread_id;
-        pthread_create(&thread_id, NULL, &get_resource, (void *)1);
-    } else {
-        pthread_t thread_id;
-        pthread_create(&thread_id, NULL, &get_resource, (void *)0);
+    int resource_based = 0;
+    pthread_t thread_id;
+    if (algo == 2) {
+        resource_based = 1;
     }
 
-    // 서버로 데이터를 전송하는 쓰레드 생성
-    pthread_t send_thread;
-    pthread_create(&send_thread, NULL, send_data_to_server, NULL);
+    pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
 
-    // 주소와 포트를 위한 구조체 정의
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-    char datagram[BUF_SIZE];
+    // // 서버로 데이터를 전송하는 쓰레드 생성
+    // pthread_t send_thread;
+    // pthread_create(&send_thread, NULL, send_data_to_server, NULL);
 
-    // 소켓 생성 및 바인드
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd == -1) {
-        perror("socket bind error");
-        exit(EXIT_FAILURE);
-    }
+    // // 주소와 포트를 위한 구조체 정의
+    // struct sockaddr_in addr;
+    // socklen_t addr_len = sizeof(addr);
+    // char datagram[BUF_SIZE];
+
+    // // 소켓 생성 및 바인드
+    // int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    // if (sockfd == -1) {
+    //     perror("socket bind error");
+    //     exit(EXIT_FAILURE);
+    // }
     
-    // while (1) {
+    while (1) {
     //     recvfrom(sockfd, datagram, BUF_SIZE, 0, (struct sockaddr *)&addr, &addr_len);
         
     //     // IP 헤더와 TCP 헤더 추출 로직은 구현 필요
@@ -94,22 +94,26 @@ int main(int argc, char *argv[]) {
     //         pthread_t thread_id;
     //         four_way_handshaking_client(server_list[server_index], server_index, datagram);
     //     }
-    // }
+    }
 
     return 0;
 }
 
 void set_servers()
 {
+    printf("set_servers\n");
+
     for (int i = 0; i < SERVER_NUM; i++) {
         server_list[i].server_index = i;
         server_list[i].client_count = 0;
         server_list[i].addr = inet_addr("127.0.0.1");
         server_list[i].port = htons(8888);
+        server_list[i].sock = -1;
     }
 }
 
 void connect_with_servers() {
+
     while (server_count < SERVER_NUM) {
         int tcp_sock;
         ServInfo * cur_svr = &server_list[server_count];
@@ -136,80 +140,89 @@ void connect_with_servers() {
 
         // 서버 정보 설정
         cur_svr->sock = tcp_sock;
+        printf("connected with servers ... %d\n", tcp_sock);
 
         server_count++;
     }
 }
 
 
-void remove_from_server_list(uint32_t server_index) {
-    for (int i = 0; i < SERVER_NUM; i++) {
-        if (server_list[i].server_index == server_index) {
-            server_list[i].addr = 0;
-            server_list[i].port = 0;
-            server_list[i].client_count = 0;
-            break;
-        }
-    }
-}
+// void remove_from_server_list(uint32_t server_index) {
+//     for (int i = 0; i < SERVER_NUM; i++) {
+//         if (server_list[i].server_index == server_index) {
+//             server_list[i].addr = 0;
+//             server_list[i].port = 0;
+//             server_list[i].client_count = 0;
+//             break;
+//         }
+//     }
+// }
 
 static void *get_resource(void * arg) {
-    int resource_based = *(int*)arg;
+    printf("create get_resource thread ...\n");
 
+    int resource_based = *(int*)arg;
+    char datagram[BUF_SIZE];
+    int str_len;
+    printf("resource_based %d \n", resource_based);
+
+    // 모든 서버에게 resource based인지 flag 전송
     for (int i = 0; i < SERVER_NUM; i++) {
-        if ((str_len = write(cur_svr->sock, 1, sizeof(int))) == 0) {
+        printf("write resource based(%d): %d\n", server_list[i].sock, resource_based);
+        if ((str_len = write(server_list[i].sock, &resource_based, sizeof(int))) == 0) {
             perror("write failed in get resource");
         }
     }
+    printf("complete write resource based\n");
+
 
     while (1) {
-        for (int i = 0; i < SERVER_NUM; i++) {
-            ServInfo * cur_svr = &server_list[i];
-
-            char datagram[BUF_SIZE];
-            // raw socket에서 resource 정보 받기
-            recvfrom(sock, datagram, sizeof(datagram), 0, NULL, NULL);
-            struct iphdr *ip = (struct iphdr *)datagram;
-            struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
-            
-            if (is_in_server_list(server_list, ip->saddr) && tcp->psh == 1 && tcp->ack) {
-                resource_list[]
-
-                if (resource_based == 1) {
-                    
-                    // get_resource_data(datagram);
-                    // change_resource_list();
-                }
-                ;
-            }
-        }
+        // raw socket에서 resource 정보 받기
+        recvfrom(sock, datagram, sizeof(datagram), 0, NULL, NULL);
+        struct iphdr *ip = (struct iphdr *)datagram;
+        struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
         
-        // find server from ip.saddr
-        // resource[server.server_index].prv_time = gettimeofday()
-        
-        // 주기적으로
-        for (int i = 0; i < SERVER_NUM; i++) {
+        // 서버에서 온 socket이면
+        if (is_in_server_list(ip->saddr) && tcp->psh == 1 && tcp->ack) {
+            // 현재 시간에 비해 마지막으로 온 패킷이 얼마나 오래되었는지 측정
+            int serv_index = get_server_index(ip->saddr);
             struct timeval now;
             gettimeofday(&now, NULL);
-            long elapsed_time = (now.tv_sec - resource_list[i].prv_time.tv_sec) * 1000;
-            elapsed_time += (now.tv_usec - resource_list[i].prv_time.tv_usec) / 1000;
-            
-            if (elapsed_time > 500) {
-                remove_from_server_list(server_list[i].server_index);
-                server_count--;
+            resource_list[serv_index].prv_time = now;
+
+            if (resource_based == 1) {
+                // get_resource_data(datagram);
+                double cpu_usage, ram_usage;
+                read(server_list[serv_index].sock, &cpu_usage, sizeof(double));
+                read(server_list[serv_index].sock, &ram_usage, sizeof(double));
+
+                printf("cpu: %.2f%%\n", cpu_usage);
+		        printf("mem: %.2f%%\n", ram_usage);
             }
         }
     }
+
+    return NULL;
 }
 
-int is_in_server_list(struct server_info server, uint32_t addr)
+int is_in_server_list(uint32_t addr)
 {
     for (int i = 0; i < SERVER_NUM; i++) {
-        if (server_list[i]->addr == addr) {
+        if (server_list[i].addr == addr) {
             return 1;
         }
     }
     return 0;
+}
+
+int get_server_index(uint32_t addr)
+{
+    for (int i = 0; i < SERVER_NUM; i++) {
+        if (server_list[i].addr == addr) {
+            return server_list[i].server_index;
+        }
+    }
+    return -1;
 }
 
 // struct server_info select_server(int algo) {

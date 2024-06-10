@@ -20,8 +20,8 @@ typedef struct server_info {
 
 typedef struct resource {
     uint32_t server_index;
-    uint32_t cpu;
-    uint32_t memory;
+    uint32_t cpu;               // CPU 사용률
+    uint32_t memory;            // Memory 사용률
     struct timeval prv_time;
 } Resrc;
 
@@ -38,7 +38,8 @@ void * send_data_to_server(void * arg);
 
 static void *get_resource(void * arg);
 // void get_resource_data(datagram);
-int is_in_server_list(struct server_info server, uint32_t addr);
+int is_in_server_list(uint32_t addr);
+int get_server_index(uint32_t addr);
 
 void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram);
 void four_way_handshaking_client(struct server_info server, int server_index, char *datagram);
