@@ -72,6 +72,7 @@ int main(int argc, char *argv[])
 
 		double cpu_usage = calculate_cpu_usage(&prev, &curr);
 		double ram_usage = (double)(info.totalram-info.freeram)/(double)info.totalram * 100.0;
+        printf("\n------- server resource -------\n");
 		printf("cpu: %.2f%%\n", cpu_usage);
 		printf("mem: %.2f%%\n", ram_usage);
 		
@@ -79,7 +80,7 @@ int main(int argc, char *argv[])
 			write(lb_sock, &cpu_usage, sizeof(double));
 			write(lb_sock, &ram_usage, sizeof(double));
 		}
-		sleep(10);
+		sleep(100);
 	}
 
 	close(lb_sock);

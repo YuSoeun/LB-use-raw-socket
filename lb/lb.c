@@ -55,9 +55,9 @@ int main(int argc, char *argv[]) {
 
     pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
 
-    // // 서버로 데이터를 전송하는 쓰레드 생성
-    // pthread_t send_thread;
-    // pthread_create(&send_thread, NULL, send_data_to_server, NULL);
+    // 서버로 데이터를 전송하는 쓰레드 생성
+    pthread_t send_thread;
+    pthread_create(&send_thread, NULL, send_data_to_server, NULL);
 
     // // 주소와 포트를 위한 구조체 정의
     // struct sockaddr_in addr;
@@ -196,6 +196,7 @@ static void *get_resource(void * arg) {
                 read(server_list[serv_index].sock, &cpu_usage, sizeof(double));
                 read(server_list[serv_index].sock, &ram_usage, sizeof(double));
 
+                printf("\n------- server resource -------\n");
                 printf("cpu: %.2f%%\n", cpu_usage);
 		        printf("mem: %.2f%%\n", ram_usage);
             }
@@ -330,6 +331,7 @@ int get_server_index(uint32_t addr)
 // }
 
 void * send_data_to_server(void * arg) {
+    printf("send_data_to_server thread start ...\n");
     char datagram[4096];
     struct sockaddr_in from_addr;
     socklen_t from_len = sizeof(from_addr);
