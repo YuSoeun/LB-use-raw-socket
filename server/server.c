@@ -6,10 +6,12 @@
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
 #include <sys/times.h>
+#include <pthread.h>
 #include "cpu.h"
 
 #define BUF_SIZE 1024
 void error_handling(char *message);
+static void *send_resource(void * arg);
 
 int main(int argc, char *argv[])
 {
@@ -21,9 +23,6 @@ int main(int argc, char *argv[])
 	struct sockaddr_in serv_adr;
 	struct sockaddr_in lb_adr;
 	socklen_t lb_adr_sz;
-	struct sysinfo info;
-
-	CpuUsage prev, curr;
 	
 	if (argc != 2) {
 		printf("Usage : %s <port>\n", argv[0]);
@@ -62,6 +61,22 @@ int main(int argc, char *argv[])
 	}
 	printf("is_get_resource %d \n", is_get_resource);
 	
+	if (is_get_resource) {
+		pthread_t thread_id;
+    	pthread_create(&thread_id, NULL, &send_resource, (void *)&lb_sock);
+	}
+
+	close(lb_sock);
+
+	close(serv_sock);
+	return 0;
+}
+
+static void *send_resource(void * arg) {
+	struct sysinfo info;
+	CpuUsage prev, curr;
+	int lb_sock = *(int*)arg;
+
 	while (1) {
 		// resource 정보 보내기
 		sysinfo(&info);
@@ -76,17 +91,11 @@ int main(int argc, char *argv[])
 		printf("cpu: %.2f%%\n", cpu_usage);
 		printf("mem: %.2f%%\n", ram_usage);
 		
-		if (is_get_resource) {
-			write(lb_sock, &cpu_usage, sizeof(double));
-			write(lb_sock, &ram_usage, sizeof(double));
-		}
+		write(lb_sock, &cpu_usage, sizeof(double));
+		write(lb_sock, &ram_usage, sizeof(double));
+
 		sleep(100);
 	}
-
-	close(lb_sock);
-
-	close(serv_sock);
-	return 0;
 }
 
 void error_handling(char *message)
