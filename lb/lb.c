@@ -8,8 +8,8 @@
 #include <netinet/tcp.h>
 #include <sys/time.h>
 #include <pthread.h>
-#include "lb.h"
 #include "client_list.h"
+#include "lb.h"
 
 int server_count = 0;
 int count = 0;
@@ -17,7 +17,8 @@ int sock = 0;       // raw socket
 
 ClientList * client_list;
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     if (argc != 4) {
 		printf("Usage: %s <Source IP> <Source Port> <LB_ALGORITHM>\n", argv[0]);
 		return 1;
@@ -58,35 +59,24 @@ int main(int argc, char *argv[]) {
     // 서버로 데이터를 전송하는 쓰레드 생성
     pthread_t send_thread;
     pthread_create(&send_thread, NULL, send_data_to_server, NULL);
-
-    // // 주소와 포트를 위한 구조체 정의
-    // struct sockaddr_in addr;
-    // socklen_t addr_len = sizeof(addr);
-    // char datagram[BUF_SIZE];
-
-    // // 소켓 생성 및 바인드
-    // int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    // if (sockfd == -1) {
-    //     perror("socket bind error");
-    //     exit(EXIT_FAILURE);
-    // }
     
+    char datagram[BUF_SIZE];
     while (1) {
-    //     recvfrom(sockfd, datagram, BUF_SIZE, 0, (struct sockaddr *)&addr, &addr_len);
+        recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL);
         
-    //     // IP 헤더와 TCP 헤더 추출 로직은 구현 필요
-    //     struct iphdr *iph = (struct iphdr *)datagram;
-    //     struct tcphdr *tcph = (struct tcphdr *)(datagram + sizeof(struct iphdr));
+        // IP 헤더와 TCP 헤더 추출
+        struct iphdr *iph = (struct iphdr *)datagram;
+        struct tcphdr *tcph = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-    //     // LB로 오는 데이터가 아니라면 continue
-    //     if (iph->daddr != lb_addr && tcph->dest != lb_port)
-    //         continue;
+        // LB로 오는 데이터가 아니라면 continue
+        if (iph->daddr != lb_addr && tcph->dest != lb_port)
+            continue;
 
-    //     // syn이면 클라이언트의 3way handshaking 요청
-    //     if (tcph->syn == 1 && !tcph->ack) {
-    //         int server_index = select_server(algo);
-    //         three_way_handshaking_client(sock, server_list[server_index], server_index, datagram);
-    //     }
+        // syn이면 클라이언트의 3way handshaking 요청
+        if (tcph->syn == 1 && !tcph->ack) {
+            int server_index = select_server(algo);
+            three_way_handshaking_client(sock, server_list[server_index], server_index, datagram);
+        }
         
     //     // fin이면 클라이언트의 4way handshaking 요청
     //     else if (tcph->fin == 1 && !tcph->ack) {
@@ -112,8 +102,8 @@ void set_servers()
     }
 }
 
-void connect_with_servers() {
-
+void connect_with_servers()
+{
     while (server_count < SERVER_NUM) {
         int tcp_sock;
         ServInfo * cur_svr = &server_list[server_count];
@@ -140,6 +130,7 @@ void connect_with_servers() {
 
         // 서버 정보 설정
         cur_svr->sock = tcp_sock;
+        cur_svr->client_count++;
         printf("connected with servers ... %d\n", tcp_sock);
 
         server_count++;
@@ -158,7 +149,8 @@ void connect_with_servers() {
 //     }
 // }
 
-static void *get_resource(void * arg) {
+static void *get_resource(void * arg)
+{
     printf("create get_resource thread ...\n");
 
     int resource_based = *(int*)arg;
@@ -226,57 +218,60 @@ int get_server_index(uint32_t addr)
     return -1;
 }
 
-// struct server_info select_server(int algo) {
-//     struct server_info selected_server;
-//     int count = 0;
+/* return server index */
+int select_server(int algo)
+{
+    int selected_index;
     
-//     if (algo == ROUND_ROBIN) {
-//         selected_server = server_list[count % server_count];
-//         count++;
-//     } else if (algo == LEAST_CONNECTION) {
-//         int min_conn = server_list[0].client_count;
-//         int min_index = 0;
-//         for (int i = 1; i < server_count; i++) {
-//             if (server_list[i].client_count < min_conn) {
-//                 min_conn = server_list[i].client_count;
-//                 min_index = i;
-//             }
-//         }
-//         selected_server = server_list[min_index];
-//     } else if (algo == RESOURCE_BASED) {
-//         int min_resource = resource_list[0].cpu * 1 + resource_list[0].memory * 1;
-//         int min_index = 0;
-//         for (int i = 1; i < server_count; i++) {
-//             int current_resource = resource_list[i].cpu * 1 + resource_list[i].memory * 1;
-//             if (current_resource < min_resource) {
-//                 min_resource = current_resource;
-//                 min_index = i;
-//             }
-//         }
-//         selected_server = server_list[min_index];
-//     }
+    if (algo == ROUND_ROBIN) {
+        selected_index = count % server_count;
+        count++;
+    } else if (algo == LEAST_CONNECTION) {
+        int min_conn = server_list[0].client_count;
+        int min_index = 0;
+        for (int i = 1; i < server_count; i++) {
+            if (server_list[i].client_count < min_conn) {
+                min_conn = server_list[i].client_count;
+                min_index = i;
+            }
+        }
+        selected_index = min_index;
+    } else if (algo == RESOURCE_BASED) {
+        int min_resource = resource_list[0].cpu * 1 + resource_list[0].memory * 1;
+        int min_index = 0;
+        for (int i = 1; i < server_count; i++) {
+            int current_resource = resource_list[i].cpu * 1 + resource_list[i].memory * 1;
+            if (current_resource < min_resource) {
+                min_resource = current_resource;
+                min_index = i;
+            }
+        }
+        selected_index = min_index;
+    }
     
-//     return selected_server;
-// }
+    return selected_index;
+}
 
-// void change_header(char *datagram) {
-//     struct iphdr *iph = (struct iphdr *)datagram;
-//     struct tcphdr *tcph = (struct tcphdr *)(datagram + (iph->ihl * 4));
+void change_header(char *datagram, int server_index)
+{
+    struct iphdr *iph = (struct iphdr *)datagram;
+    struct tcphdr *tcph = (struct tcphdr *)(datagram + (iph->ihl * 4));
     
-//     struct server_info server = select_server(ROUND_ROBIN);
-//     iph->daddr = server.addr;
-//     tcph->dest = htons(server.port);
-// }
+    struct server_info server = server_list[server_index];
+    iph->daddr = server.addr;
+    tcph->dest = htons(server.port);
+}
 
-// void three_way_handshaking_client(int sock, struct server_info server_addr, int server_index, char *datagram) {
-//     struct sockaddr_in client_addr;
-//     socklen_t addr_len = sizeof(struct sockaddr_in);
+void three_way_handshaking_client(int sock, struct server_info server_addr, int server_index, char *datagram)
+{
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(struct sockaddr_in);
 
-//     // SYN
-//     change_header(datagram); // SYN 패킷을 설정하는 사용자 정의 함수
-//     if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-//         perror("sendto failed");
-//     }
+    // SYN
+    change_header(datagram, server_index);          // SYN 패킷을 설정하는 사용자 정의 함수
+    if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("sendto failed");
+    }
 
 //     // ACK
 //     while (1) {
@@ -293,11 +288,12 @@ int get_server_index(uint32_t addr)
 //             }
 //             break;
 //         }
-//     }
+ 
+//    }
 
 //     ClientNode * newnode =  InitNodeInfo(server_index, server_list[server_index].addr, server_list[server_index].port);
 //     InsertNode(newnode);
-// }
+}
 
 // void four_way_handshaking_client(struct server_info server, int server_index, char *datagram) {
 //     struct sockaddr_in client_addr;
@@ -330,7 +326,8 @@ int get_server_index(uint32_t addr)
 //     RemoveNode(client); // 클라이언트 노드 제거 함수 호출
 // }
 
-void * send_data_to_server(void * arg) {
+void * send_data_to_server(void * arg)
+{
     printf("send_data_to_server thread start ...\n");
     char datagram[4096];
     struct sockaddr_in from_addr;

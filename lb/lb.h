@@ -33,15 +33,15 @@ uint16_t lb_port;
 void set_servers();
 void connect_with_servers();
 void remove_from_server_list(uint32_t server_index);
-struct server_info select_server(int algo);
+int select_server(int algo);
 void * send_data_to_server(void * arg);
 
+void change_header(char *datagram, int server_index);
 static void *get_resource(void * arg);
-// void get_resource_data(datagram);
 int is_in_server_list(uint32_t addr);
 int get_server_index(uint32_t addr);
 
-void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram);
+void three_way_handshaking_client(int sock, struct server_info server_addr, int server_index, char *datagram);
 void four_way_handshaking_client(struct server_info server, int server_index, char *datagram);
 
 #endif
