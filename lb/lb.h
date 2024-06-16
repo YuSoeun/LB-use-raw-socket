@@ -45,10 +45,12 @@ void set_servers();
 void connect_with_servers();
 void remove_from_server_list(uint32_t server_index);
 int select_server(int algo);
-void * send_data_to_server(void * arg);
+void send_data_to_server(int sock, struct sockaddr_in server_addr, int server_index, char *datagram);
 
 void change_header(char *datagram, int server_index);
 void change_header_ack(char *datagram, int server_index);
+void change_header_data(char *datagram, int server_index);
+
 static void *get_resource(void * arg);
 int is_in_server_list(uint32_t addr);
 int get_server_index(uint32_t addr);

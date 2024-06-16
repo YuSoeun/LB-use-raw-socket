@@ -80,11 +80,12 @@ int main(int argc, char *argv[])
 		perror("setsockopt(IP_HDRINCL, 1)");
 		exit(EXIT_FAILURE);
 	}
-	three_way_handshaking(sock, saddr, daddr);
-
-	// // Data transfer 
-	// uint32_t next_seq = tcp->seq;
-	// uint32_t next_ack = tcp->ack_seq;
+	struct tcphdr *tcp;
+	memcpy(tcp, three_way_handshaking(sock, saddr, daddr), BUF_SIZE);
+	char message[BUF_SIZE];
+	// Data transfer 
+	uint32_t next_seq = tcp->seq;
+	uint32_t next_ack = tcp->ack_seq;
 	// while (1) 
 	// {
 	// 	fputs("Input message(Q to quit): ", stdout);
@@ -100,7 +101,7 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-void three_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr)
+void* three_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr)
 {
 	// TCP Three-way Handshaking
 	// Step 1. Send SYN
@@ -151,44 +152,50 @@ void three_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_i
 	}
 	extract_ip_header(datagram);
 	printf("send size: %d\n", size);
+	
+	tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
+	return (void *)tcp;
 }
 
-// void data_transfer(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr, char *message, uint32_t* next_seq, uint32_t* next_ack)
-// {
-// 	// Step 4. Send an application message (with PSH and ACK flag)! 
-// 		printf("\nStep 4. Send an application message (with PSH and ACK flag)!\n");
-// 		id = ip->id;
-// 		datagram = realloc(datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + sizeof(struct iphdr) + sizeof(message));
-// 		ip = (struct iphdr*)datagram;
-// 		tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
-// 		datagram = memset(datagram, 0, sizeof(Pseudo) + sizeof(struct tcphdr) + sizeof(struct iphdr) + OPT_SIZE + sizeof(message));
+void data_transfer(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr, char *message, uint32_t *next_seq, uint32_t *next_ack)
+{
+		// Step 4. Send an application message (with PSH and ACK flag)! 
+		printf("\nStep 4. Send an application message (with PSH and ACK flag)!\n");
 		
-// 		set_data_packet(ip, tcp, saddr, daddr, datagram, message, next_seq, next_ack, id);
-// 		extract_ip_header(datagram);
+		socklen_t addr_size = sizeof(struct sockaddr);
+		char *datagram = (char *)calloc(sizeof(Pseudo) + sizeof(struct tcphdr) + sizeof(struct iphdr) + sizeof(message), sizeof(char));
+		struct iphdr *ip = (struct iphdr*)datagram;
+		struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
+		struct tcphdr *recv_tcp = (struct tcphdr *)malloc(sizeof(struct tcphdr));
+		uint16_t id = ip->id;
+
+		set_data_packet(ip, tcp, saddr, daddr, datagram, message, *next_seq, *next_ack, id);
+		extract_ip_header(datagram);
 		
-// 		if ((size = sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr*)&daddr, addr_size)) < 0) {
-// 			perror("Could not send ACK data");
-// 		}
+		int size = 0;
+		if ((size = sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr*)&daddr, addr_size)) < 0) {
+			perror("Could not send ACK data");
+		}
 		
-// 		// Step 5. Receive ACK
-// 		printf("\nStep 5. Receive ACK\n");
-// 		recv_tcp = memset(recv_tcp, 0, sizeof(struct tcphdr));
-// 		while(1) {
-// 			if ((size = recvfrom(sock, message, BUF_SIZE, 0, NULL, NULL)) < 0) {
-// 				perror("Receive error");
-// 			}
+		// Step 5. Receive ACK
+		printf("\nStep 5. Receive ACK\n");
+		recv_tcp = memset(recv_tcp, 0, sizeof(struct tcphdr));
+		while(1) {
+			if ((size = recvfrom(sock, message, BUF_SIZE, 0, NULL, NULL)) < 0) {
+				perror("Receive error");
+			}
 
-// 			recv_tcp = (struct tcphdr*)(message + sizeof(struct iphdr));
-// 			if (ntohs(tcp->source) == ntohs(recv_tcp->th_dport))
-// 				break;
-// 		}
+			recv_tcp = (struct tcphdr*)(message + sizeof(struct iphdr));
+			if (ntohs(tcp->source) == ntohs(recv_tcp->th_dport))
+				break;
+		}
 
-// 		extract_ip_header(message);
-// 		printf("receive size: %d\n", size);
+		extract_ip_header(message);
+		printf("receive size: %d\n", size);
 
-// 		*next_seq = recv_tcp->ack_seq;
-// 		*next_ack = recv_tcp->seq;
-// }
+		*next_seq = recv_tcp->ack_seq;
+		*next_ack = recv_tcp->seq;
+}
 
 
 void set_syn_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in saddr, struct sockaddr_in daddr, char *datagram)

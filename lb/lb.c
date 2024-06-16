@@ -111,12 +111,20 @@ int main(int argc, char *argv[])
         if (iph->daddr != lb_addr && tcph->dest != lb_port)
             continue;
 
+        int server_index = 0;
+
         // syn이면 클라이언트의 3way handshaking 요청
-        if (tcph->syn == 1 && !tcph->ack && tcph->dest == lb_port) {
+        if (tcph->syn && !tcph->ack && !tcph->fin) {
             printf("start three-way-handshaking\n");
-            int server_index = select_server(algo);
+            server_index = select_server(algo);
             three_way_handshaking_client(sock, server_list[server_index].saddr, server_index, datagram);
         }
+
+        // data request면 server로 전송
+        // if (tcph->psh && tcph->ack) {
+        //     printf("send data request\n");
+        //     send_data_to_server(sock, server_list[server_index].saddr, server_index, datagram);
+        // }
         
     //     // fin이면 클라이언트의 4way handshaking 요청
     //     else if (tcph->fin == 1 && !tcph->ack) {
@@ -421,6 +429,68 @@ void change_header_ack(char *datagram, int server_index)
 	free(pseudo_datagram);
 }
 
+void change_header_data(char *datagram, int server_index)
+{
+    struct iphdr *ip = (struct iphdr *)datagram;
+    struct tcphdr *tcp = (struct tcphdr *)(datagram + (ip->ihl * 4));
+    struct sockaddr_in serv_adr = server_list[server_index].saddr;
+
+    Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
+	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	if (pseudo == NULL) {
+		perror("malloc: ");
+		exit(EXIT_FAILURE);
+	}
+
+	ip->version = 4;
+	ip->ihl = 5;
+	ip->tos = 0;
+	ip->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE;
+
+	ip->id = ip->id;
+	ip->frag_off = htons(1 << 14);
+	ip->ttl = 64;
+	ip->protocol = IPPROTO_TCP;
+	ip->saddr = ip->saddr;
+	ip->daddr = serv_adr.sin_addr.s_addr;
+
+	tcp->source = tcp->source;
+	tcp->dest = serv_adr.sin_port;
+	tcp->seq = tcp->seq;
+	tcp->ack_seq = tcp->ack_seq;
+
+	tcp->doff = 5;
+	tcp->res1 = 0;
+	tcp->urg = 0;
+	tcp->ack = 1;
+	tcp->psh = 1;
+	tcp->rst = 0;
+	tcp->syn = 0;
+	tcp->fin = 0;
+
+	tcp->window = htons(5840);		// window size
+	tcp->urg_ptr = 0;
+
+	pseudo->saddr = ip->saddr;
+	pseudo->daddr = ip->daddr;
+	pseudo->placeholder = 0;
+	pseudo->protocol = IPPROTO_TCP;
+	pseudo->tcplen = htons(recv_size);
+
+    tcp->check = 0;
+    ip->check = 0;
+
+	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
+	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, recv_size);
+	
+    tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + recv_size);
+	ip->check = checksum((__u_short *)datagram, ip->tot_len);
+
+	// set TCP options
+	free(pseudo);
+	free(pseudo_datagram);
+}
+
 void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram)
 {
     struct sockaddr_in client_addr;
@@ -437,8 +507,9 @@ void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int 
         perror("sendto failed");
     }
     printf("send size = %d %d\n", size, errno);
+    sleep(5);
 
-    // ACK
+    // ACK이면
     while (1) {
         if ((recv_size = recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL)) < 0) {
             perror("recvfrom failed");
@@ -495,20 +566,23 @@ void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int 
 //     RemoveNode(client); // 클라이언트 노드 제거 함수 호출
 // }
 
-void * send_data_to_server(void * arg)
+void send_data_to_server(int sock, struct sockaddr_in server_addr, int server_index, char *datagram)
 {
     printf("send_data_to_server thread start ...\n");
-    char datagram[4096];
-    struct sockaddr_in from_addr;
-    socklen_t from_len = sizeof(from_addr);
+    // struct sockaddr_in from_addr;
+    // socklen_t from_len = sizeof(from_addr);
 
-    // 데이터 수신
-    // if (recvfrom(sock, datagram, sizeof(datagram), 0, (struct sockaddr *)&from_addr, &from_len) < 0) {
-    //     perror("recvfrom failed");
-    //     return;
-    // }
-
-    struct iphdr *iph = (struct iphdr *)datagram;
+    // data
+    change_header_data(datagram, server_index);
+    printf("LB에서 data 헤더 바꾼 것\n");
+    extract_ip_header(datagram);
+	struct iphdr *ip = (struct iphdr*)datagram;
+    
+    int size;
+    if (sendto(sock, datagram, recv_size, 0, (struct sockaddr *)&server_addr, sizeof(struct sockaddr))< 0) {
+        perror("sendto failed");
+    }
+    printf("send size = %d %d\n", size, errno);
 
     // 클라이언트 리스트에 소스 IP가 있는지 확인
     // if (Search(list, htos(iph->saddr))) {
