@@ -9,6 +9,7 @@
 #include <sys/sysinfo.h>
 #include <sys/times.h>
 #include <pthread.h>
+#include <errno.h>
 #include "cpu.h"
 
 #define BUF_SIZE 1024
@@ -18,7 +19,7 @@ struct sockaddr_in serv_adr;
 void error_handling(char *message);
 void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *datagram);
 static void *send_resource(void * arg);
-void change_header(char *datagram);
+void change_header(char *datagram, struct sockaddr_in lb_adr);
 void extract_ip_header(char* buffer);
 void extract_tcp_packet(char* buffer);
 
@@ -145,7 +146,7 @@ int main(int argc, char *argv[])
         struct iphdr *ip = (struct iphdr *)datagram;
         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-		if (ip->saddr != lb_adr.sin_addr.s_addr && tcp->dest != htons(8888))
+		if (ip->saddr != lb_adr.sin_addr.s_addr && tcp->dest != serv_adr.sin_port)
 			continue;
 
 		// three way handshaking
@@ -170,10 +171,11 @@ int main(int argc, char *argv[])
 void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *datagram) {
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(struct sockaddr_in);
+	struct iphdr *ip = (struct iphdr*)datagram;
 
-    // SYN
-    change_header(datagram); // SYN 패킷을 설정하는 사용자 정의 함수
-    if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
+    // SYNACK send
+    change_header(datagram, lb_adr);
+    if (sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
         perror("sendto failed");
     }
 
@@ -186,12 +188,12 @@ void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *dat
 		struct iphdr *ip = (struct iphdr *)datagram;
         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-		if (ip->saddr != lb_adr.sin_addr.s_addr && tcp->dest != htons(8888))
+		if (ip->saddr != lb_adr.sin_addr.s_addr && tcp->dest != serv_adr.sin_port)
 			continue;
 
         // if (tcp->syn != 1 && tcp->ack == 1) {
     	// 	extract_ip_header(datagram);
-        //     change_header(datagram); // ACK 패킷을 설정하는 사용자 정의 함수
+        //     change_header(datagram, lb_adr); // ACK 패킷을 설정하는 사용자 정의 함수
         //     if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         //         perror("sendto failed");
         //     }
@@ -229,7 +231,7 @@ static void *send_resource(void * arg) {
 	}
 }
 
-void change_header(char *datagram)
+void change_header(char *datagram, struct sockaddr_in lb_adr)
 {
 	struct iphdr *ip = (struct iphdr *)datagram;
     struct tcphdr *tcp = (struct tcphdr *)(datagram + (ip->ihl * 4));
@@ -250,11 +252,11 @@ void change_header(char *datagram)
 	ip->frag_off = htons(1 << 14);
 	ip->ttl = 64;
 	ip->protocol = IPPROTO_TCP;
-	ip->saddr = ip->daddr;
-	ip->daddr = serv_adr.sin_addr.s_addr;
+	ip->daddr = ip->saddr;
+	ip->saddr = lb_adr.sin_addr.s_addr;
 
-	tcp->source = tcp->dest;
-	tcp->dest = serv_adr.sin_port;
+	tcp->dest = tcp->source;
+	tcp->source = lb_adr.sin_port;
 	tcp->seq = tcp->seq;
 	tcp->ack_seq = htonl(0);
 
