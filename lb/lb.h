@@ -14,8 +14,6 @@ typedef enum lb_algo {
 typedef struct server_info {
     uint32_t server_index;
     int sock;
-    // uint32_t addr;
-    // uint16_t port;
     struct sockaddr_in saddr;
     uint32_t client_count;
 } ServInfo;

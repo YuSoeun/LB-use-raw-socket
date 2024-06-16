@@ -85,15 +85,14 @@ int main(int argc, char *argv[])
 	}
 
     // 서버들과 연결
-    // connect_with_servers();
+    connect_with_servers();
 
     // 서버의 리소스 정보를 받아오는 쓰레드 생성
-    // int resource_based = 0;
-    // pthread_t thread_id;
-    // if (algo == 2) {
-    //     resource_based = 1;
-    // }
-
+    int resource_based = 0;
+    pthread_t thread_id;
+    if (algo == 2) {
+        resource_based = 1;
+    }
     // pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
 
     // 서버로 데이터를 전송하는 쓰레드 생성
@@ -320,10 +319,10 @@ void change_header(char *datagram, int server_index)
 	ip->frag_off = htons(1 << 14);
 	ip->ttl = 64;
 	ip->protocol = IPPROTO_TCP;
-	ip->saddr = ip->daddr;
+	ip->saddr = ip->saddr;
 	ip->daddr = serv_adr.sin_addr.s_addr;
 
-	tcp->source = saddr.sin_port;
+	tcp->source = tcp->source;
 	tcp->dest = serv_adr.sin_port;
 	tcp->seq = tcp->seq;
 	tcp->ack_seq = htonl(0);
@@ -348,7 +347,7 @@ void change_header(char *datagram, int server_index)
 
     tcp->check = 0;
     ip->check = 0;
-    
+
 	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
 	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE);
 	
