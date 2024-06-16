@@ -16,6 +16,7 @@ int server_count = 0;
 int count = 0;
 int sock = 0;       // raw socket
 int recv_size = 0;
+struct sockaddr_in saddr;
 
 ClientList * client_list;
 void extract_ip_header(char* buffer);
@@ -66,7 +67,6 @@ int main(int argc, char *argv[])
 	}
 
     // Source IP
-	struct sockaddr_in saddr;
 	saddr.sin_family = AF_INET;
 	saddr.sin_port = htons(atoi(argv[2]));
 	if (inet_pton(AF_INET, argv[1], &saddr.sin_addr) != 1) {
@@ -303,10 +303,10 @@ void change_header(char *datagram, int server_index)
     struct iphdr *iph = (struct iphdr *)datagram;
     struct tcphdr *tcph = (struct tcphdr *)(datagram + (iph->ihl * 4));
     Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
-	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	char *pseudo_datagram = (char *)calloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE, sizeof(char));
 
     iph->saddr = iph->daddr;
-    tcph->th_sport = tcph->dest;
+    tcph->source = tcph->dest;
     
     struct server_info server = server_list[server_index];
     iph->daddr = server.saddr.sin_addr.s_addr;
@@ -320,8 +320,12 @@ void change_header(char *datagram, int server_index)
 
     memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
 	memcpy(pseudo_datagram + sizeof(Pseudo), tcph, sizeof(struct tcphdr) + OPT_SIZE);
+    
+    tcph->check = 0;
     tcph->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
-	iph->check = checksum((__u_short *)datagram, recv_size);
+	
+    iph->check = 0;
+    iph->check = checksum((__u_short *)datagram, recv_size);
 
     // set TCP options
 	free(pseudo);
