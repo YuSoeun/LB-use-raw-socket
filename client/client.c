@@ -120,20 +120,22 @@ void three_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_i
 	printf("send size: %d\n", size);
 
 	// Step 2. Receive SYN-ACK
-	// printf("\nStep 2. Receive SYN-ACK\n");
-	// char message[BUF_SIZE];
-	// struct tcphdr *recv_tcp = (struct tcphdr *)malloc(sizeof(struct tcphdr));
-	// while(1) {
-	// 	if ((size = recvfrom(sock, message, BUF_SIZE, 0, NULL, NULL)) < 0) {
-	// 		perror("Receive error");
-	// 	}
+	printf("\nStep 2. Receive SYN-ACK\n");
+	char message[BUF_SIZE];
+	struct tcphdr *recv_tcp = (struct tcphdr *)malloc(sizeof(struct tcphdr));
+	while(1) {
+		if ((size = recvfrom(sock, message, BUF_SIZE, 0, NULL, NULL)) < 0) {
+			perror("Receive error");
+		}
 
-	// 	recv_tcp = (struct tcphdr*)(message + sizeof(struct iphdr));
-	// 	if (ntohs(tcp->source) == ntohs(recv_tcp->th_dport) && recv_tcp->syn && recv_tcp->ack)
-	// 		break;
-	// }
-	// extract_ip_header(message);
-	// printf("receive size: %d\n", size);
+		if (ip->saddr != saddr.sin_addr.s_addr)
+
+		recv_tcp = (struct tcphdr*)(message + sizeof(struct iphdr));
+		if (tcp->source == recv_tcp->th_dport && recv_tcp->syn && recv_tcp->ack)
+			break;
+	}
+	extract_ip_header(message);
+	printf("receive size: %d\n", size);
 
 	// // Step 3. Send ACK
 	// printf("\nStep 3. Send ACK \n");
