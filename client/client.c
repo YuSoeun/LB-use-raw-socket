@@ -12,6 +12,8 @@
 // Before run this code, execute the command below 
 // $ sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP
 
+struct sockaddr_in saddr;
+
 // checksum function which returns unsigned short value 
 unsigned short checksum(__u_short *addr, int len)
 {
@@ -55,7 +57,6 @@ int main(int argc, char *argv[])
 	}
 
 	// Source IP
-	struct sockaddr_in saddr;
 	saddr.sin_family = AF_INET;
 	saddr.sin_port = htons(rand() % 65535); // random client port
 	if (inet_pton(AF_INET, argv[1], &saddr.sin_addr) != 1) {
@@ -128,7 +129,8 @@ void three_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_i
 			perror("Receive error");
 		}
 
-		if (ip->saddr != saddr.sin_addr.s_addr)
+		if (ip->daddr != saddr.sin_addr.s_addr)
+			continue;
 
 		recv_tcp = (struct tcphdr*)(message + sizeof(struct iphdr));
 		if (tcp->source == recv_tcp->th_dport && recv_tcp->syn && recv_tcp->ack)
@@ -137,18 +139,18 @@ void three_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_i
 	extract_ip_header(message);
 	printf("receive size: %d\n", size);
 
-	// // Step 3. Send ACK
-	// printf("\nStep 3. Send ACK \n");
-	// uint32_t seq = tcp->seq;
-	// uint16_t id = ip->id;
-	// datagram = memset(datagram, 0, sizeof(Pseudo) + sizeof(struct tcphdr) + sizeof(struct iphdr));
-	// set_ack_packet(ip, tcp, saddr, daddr, datagram, seq, recv_tcp->th_seq, id);
+	// Step 3. Send ACK
+	printf("\nStep 3. Send ACK \n");
+	uint32_t seq = tcp->seq;
+	uint16_t id = ip->id;
+	datagram = memset(datagram, 0, sizeof(Pseudo) + sizeof(struct tcphdr) + sizeof(struct iphdr));
+	set_ack_packet(ip, tcp, daddr, datagram, seq, recv_tcp->th_seq, id);
 
-	// if ((size = sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr*)&daddr, addr_size)) < 0) {
-	// 	perror("Could not send ACK data");
-	// }
-	// extract_ip_header(datagram);
-	// printf("send size: %d\n", size);
+	if ((size = sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr*)&daddr, addr_size)) < 0) {
+		perror("Could not send ACK data");
+	}
+	extract_ip_header(datagram);
+	printf("send size: %d\n", size);
 }
 
 // void data_transfer(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr, char *message, uint32_t* next_seq, uint32_t* next_ack)
@@ -243,7 +245,7 @@ void set_syn_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in sad
 	free(pseudo_datagram);
 }
 
-void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in saddr, struct sockaddr_in daddr, char *datagram, uint32_t seq, uint32_t ack_seq, uint16_t id)
+void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in daddr, char *datagram, uint32_t seq, uint32_t ack_seq, uint16_t id)
 {
 	Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
 	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
@@ -261,11 +263,11 @@ void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in sad
 	ip->frag_off = htons(1 << 14);
 	ip->ttl = 64;
 	ip->protocol = IPPROTO_TCP;
+	ip->daddr = ip->saddr;
 	ip->saddr = saddr.sin_addr.s_addr;
-	ip->daddr = daddr.sin_addr.s_addr;
 
+	tcp->dest = tcp->source;
 	tcp->source = saddr.sin_port;
-	tcp->dest = daddr.sin_port;
 	tcp->seq = htonl(ntohl(seq) + 1);
 	tcp->ack_seq = htonl(ntohl(ack_seq) + 1);
 
@@ -286,6 +288,9 @@ void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in sad
 	pseudo->placeholder = 0;
 	pseudo->protocol = IPPROTO_TCP;
 	pseudo->tcplen = htons(sizeof(struct tcphdr) + OPT_SIZE);
+
+	tcp->check = 0;
+	ip->check = 0;
 
 	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
 	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr));

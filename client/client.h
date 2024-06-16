@@ -22,7 +22,7 @@ void set_syn_option(char * datagram);
 void set_ack_option(char * datagram);
 
 void set_syn_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in saddr, struct sockaddr_in daddr, char *datagram);
-void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in saddr, struct sockaddr_in daddr, char *datagram, uint32_t seq, uint32_t ack_seq, uint16_t id);
+void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in daddr, char *datagram, uint32_t seq, uint32_t ack_seq, uint16_t id);
 void set_data_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in saddr, struct sockaddr_in daddr, char *datagram, char* msg, uint32_t seq, uint32_t ack_seq, uint16_t id);
 
 void three_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr);
