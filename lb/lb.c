@@ -56,8 +56,8 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-    unsigned long lb_addr = inet_addr(argv[1]);
-    unsigned short lb_port = htons(atoi(argv[2]));
+    lb_addr = inet_addr(argv[1]);
+    lb_port = htons(atoi(argv[2]));
     int algo = (argv[3][0] - '0');
 
     sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
@@ -266,7 +266,7 @@ int get_server_index(uint32_t addr)
 /* return server index */
 int select_server(int algo)
 {
-    int selected_index;
+    int selected_index = 0;
     
     if (algo == ROUND_ROBIN) {
         selected_index = count % server_count;
@@ -359,6 +359,68 @@ void change_header(char *datagram, int server_index)
 	free(pseudo_datagram);
 }
 
+void change_header_ack(char *datagram, int server_index)
+{
+    struct iphdr *ip = (struct iphdr *)datagram;
+    struct tcphdr *tcp = (struct tcphdr *)(datagram + (ip->ihl * 4));
+    struct sockaddr_in serv_adr = server_list[server_index].saddr;
+
+    Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
+	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	if (pseudo == NULL) {
+		perror("malloc: ");
+		exit(EXIT_FAILURE);
+	}
+
+	ip->version = 4;
+	ip->ihl = 5;
+	ip->tos = 0;
+	ip->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE;
+
+	ip->id = ip->id;
+	ip->frag_off = htons(1 << 14);
+	ip->ttl = 64;
+	ip->protocol = IPPROTO_TCP;
+	ip->saddr = ip->saddr;
+	ip->daddr = serv_adr.sin_addr.s_addr;
+
+	tcp->source = tcp->source;
+	tcp->dest = serv_adr.sin_port;
+	tcp->seq = tcp->seq;
+	tcp->ack_seq = tcp->ack_seq;
+
+	tcp->doff = 5;
+	tcp->res1 = 0;
+	tcp->urg = 0;
+	tcp->ack = 1;
+	tcp->psh = 0;
+	tcp->rst = 0;
+	tcp->syn = 0;
+	tcp->fin = 0;
+
+	tcp->window = htons(5840);		// window size
+	tcp->urg_ptr = 0;
+
+	pseudo->saddr = ip->saddr;
+	pseudo->daddr = ip->daddr;
+	pseudo->placeholder = 0;
+	pseudo->protocol = IPPROTO_TCP;
+	pseudo->tcplen = htons(sizeof(struct tcphdr) + OPT_SIZE);
+
+    tcp->check = 0;
+    ip->check = 0;
+
+	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
+	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE);
+	
+    tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	ip->check = checksum((__u_short *)datagram, ip->tot_len);
+
+	// set TCP options
+	free(pseudo);
+	free(pseudo_datagram);
+}
+
 void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram)
 {
     struct sockaddr_in client_addr;
@@ -371,14 +433,14 @@ void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int 
 	struct iphdr *ip = (struct iphdr*)datagram;
     
     int size;
-    if ((size = sendto(sock, datagram, recv_size, 0, (struct sockaddr *)&server_addr, sizeof(struct sockaddr))) < 0) {
+    if (sendto(sock, datagram, recv_size, 0, (struct sockaddr *)&server_addr, sizeof(struct sockaddr))< 0) {
         perror("sendto failed");
     }
     printf("send size = %d %d\n", size, errno);
 
     // ACK
     while (1) {
-        if (recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL) < 0) {
+        if ((recv_size = recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL)) < 0) {
             perror("recvfrom failed");
         }
         struct iphdr *ip = (struct iphdr *)datagram;
@@ -388,10 +450,12 @@ void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int 
             continue;
 
         if (tcp->syn != 1 && tcp->ack == 1 && tcp->fin != 1 && tcp->rst != 1) {
-            change_header(datagram); // ACK 패킷을 설정하는 사용자 정의 함수
-            if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+            change_header_ack(datagram, 0); // ACK 패킷을 설정하는 사용자 정의 함수
+            printf("LB에서 ACK 헤더 바꾼 것\n");
+            if ((size = sendto(sock, datagram, recv_size, 0, (struct sockaddr *)&server_addr, sizeof(struct sockaddr))) < 0) {
                 perror("sendto failed");
             }
+            printf("send size = %d %d\n", size, errno);
             break;
         }
    }
