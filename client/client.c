@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	// Tell the kernel that headers are included in the packet
+	// three_way_handshaking, socket option 설정 (headers are included in the packet)
 	int one = 1;
 	const int *val = &one;
 	if (setsockopt(sock, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) == -1) {

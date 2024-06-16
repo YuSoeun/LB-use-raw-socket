@@ -54,11 +54,11 @@ int main(int argc, char *argv[])
         resource_based = 1;
     }
 
-    pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
+    // pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
 
     // 서버로 데이터를 전송하는 쓰레드 생성
-    pthread_t send_thread;
-    pthread_create(&send_thread, NULL, send_data_to_server, NULL);
+    // pthread_t send_thread;
+    // pthread_create(&send_thread, NULL, send_data_to_server, NULL);
     
     char datagram[BUF_SIZE];
     while (1) {
@@ -74,6 +74,7 @@ int main(int argc, char *argv[])
 
         // syn이면 클라이언트의 3way handshaking 요청
         if (tcph->syn == 1 && !tcph->ack) {
+            printf("start three-way-handshaking\n");
             int server_index = select_server(algo);
             three_way_handshaking_client(sock, server_list[server_index], server_index, datagram);
         }
@@ -151,11 +152,10 @@ void connect_with_servers()
 
 static void *get_resource(void * arg)
 {
-    printf("create get_resource thread ...\n");
-
     int resource_based = *(int*)arg;
     char datagram[BUF_SIZE];
     int str_len;
+    printf("create get_resource thread ...\n");
     printf("resource_based %d \n", resource_based);
 
     // 모든 서버에게 resource based인지 flag 전송
@@ -168,7 +168,7 @@ static void *get_resource(void * arg)
     printf("complete write resource based\n");
 
 
-    while (1) {
+    while (resource_based == 1) {
         // raw socket에서 resource 정보 받기
         recvfrom(sock, datagram, sizeof(datagram), 0, NULL, NULL);
         struct iphdr *ip = (struct iphdr *)datagram;

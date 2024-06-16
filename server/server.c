@@ -13,8 +13,9 @@
 
 #define BUF_SIZE 1024
 void error_handling(char *message);
-// void three_way_handshaking_client(int sock, struct server_info server_addr, int server_index, char *datagram);
+void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *datagram);
 static void *send_resource(void * arg);
+void change_header(char *datagram, struct sockaddr_in lb_adr);
 
 int main(int argc, char *argv[])
 {
@@ -58,17 +59,17 @@ int main(int argc, char *argv[])
 		printf("Connected client %d \n", i+1);
 	
 	// get resource 알고리즘을 사용하는 LB인지 받기
-	int is_get_resource = 0;
-	if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
-		perror("read failed in get resource");
-	}
-	printf("is_get_resource %d \n", is_get_resource);
+	// int is_get_resource = 0;
+	// if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
+	// 	perror("read failed in get resource");
+	// }
+	// printf("is_get_resource %d \n", is_get_resource);
 	
 	// resource 보내주는 thread 생성
-	if (is_get_resource) {
-		pthread_t thread_id;
-    	pthread_create(&thread_id, NULL, &send_resource, (void *)&lb_sock);
-	}
+	// if (is_get_resource) {
+	// 	pthread_t thread_id;
+    // 	pthread_create(&thread_id, NULL, &send_resource, (void *)&lb_sock);
+	// }
 
 	// raw socket listen
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
@@ -85,10 +86,13 @@ int main(int argc, char *argv[])
         struct iphdr *iph = (struct iphdr *)datagram;
         struct tcphdr *tcph = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
+		if (iph->saddr != lb_adr.sin_addr.s_addr && tcph->dest != serv_adr.sin_port)
+			continue;
+
+		// three way handshaking
 		if (tcph->syn == 1 && !tcph->ack) {
 			printf("datagram(%d): %s\n", str_len, datagram);
-			// syn 받기
-            // three_way_handshaking_client(sock, client_list[index], server_index, datagram);
+            three_way_handshaking_client(sock, lb_adr, datagram);
         }
 
 		//     // fin이면 클라이언트의 4way handshaking 요청
@@ -104,36 +108,36 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
-// void three_way_handshaking_client(int sock, struct server_info server_addr, int server_index, char *datagram) {
-//     struct sockaddr_in client_addr;
-//     socklen_t addr_len = sizeof(struct sockaddr_in);
+void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *datagram) {
+    struct sockaddr_in client_addr;
+    socklen_t addr_len = sizeof(struct sockaddr_in);
 
-//     // SYN
-//     change_header(datagram); // SYN 패킷을 설정하는 사용자 정의 함수
-//     if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-//         perror("sendto failed");
-//     }
+    // SYN
+    change_header(datagram, lb_adr); // SYN 패킷을 설정하는 사용자 정의 함수
+    if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
+        perror("sendto failed");
+    }
 
-// //     // ACK
-// //     while (1) {
-// //         if (recvfrom(sock, datagram, BUF_SIZE, 0, (struct sockaddr *)&client_addr, &addr_len) < 0) {
-// //             perror("recvfrom failed");
-// //         }
-// //         struct iphdr *ip = (struct iphdr *)datagram;
-// //         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
+//     // ACK
+//     while (1) {
+//         if (recvfrom(sock, datagram, BUF_SIZE, 0, (struct sockaddr *)&client_addr, &addr_len) < 0) {
+//             perror("recvfrom failed");
+//         }
+//         struct iphdr *ip = (struct iphdr *)datagram;
+//         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-// //         if (ip->saddr == server_addr.sin_addr.s_addr && tcp->syn == 1 && tcp->ack == 1) {
-// //             change_header(datagram); // ACK 패킷을 설정하는 사용자 정의 함수
-// //             if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-// //                 perror("sendto failed");
-// //             }
-// //             break;
-// //         }
-// //    }
+//         if (ip->saddr == server_addr.sin_addr.s_addr && tcp->syn == 1 && tcp->ack == 1) {
+//             change_header(datagram, lb_adr); // ACK 패킷을 설정하는 사용자 정의 함수
+//             if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+//                 perror("sendto failed");
+//             }
+//             break;
+//         }
+//    }
 
-// //     ClientNode * newnode =  InitNodeInfo(server_index, server_list[server_index].addr, server_list[server_index].port);
-// //     InsertNode(newnode);
-// }
+//     ClientNode * newnode =  InitNodeInfo(server_index, server_list[server_index].addr, server_list[server_index].port);
+//     InsertNode(newnode);
+}
 
 /* resource 정보(CPU와 RAM 사용률) 보내는 thread */
 static void *send_resource(void * arg) {
@@ -145,7 +149,7 @@ static void *send_resource(void * arg) {
 		sysinfo(&info);
 
 		get_cpu_usage(&prev);
-		sleep(1); // 1초 대기 후 다시 측정
+		sleep(50); // 50초 대기 후 다시 측정
 		get_cpu_usage(&curr);
 
 		double cpu_usage = calculate_cpu_usage(&prev, &curr);
@@ -159,6 +163,15 @@ static void *send_resource(void * arg) {
 
 		sleep(100);
 	}
+}
+
+void change_header(char *datagram, struct sockaddr_in lb_adr)
+{
+    struct iphdr *iph = (struct iphdr *)datagram;
+    struct tcphdr *tcph = (struct tcphdr *)(datagram + (iph->ihl * 4));
+    
+    iph->daddr = server.addr;
+    tcph->dest = htons(server.port);
 }
 
 void error_handling(char *message)
