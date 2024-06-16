@@ -1,6 +1,7 @@
 #ifndef __LB_H__
 #define __LB_H__
 
+#define OPT_SIZE 0
 #define SERVER_NUM 1
 #define BUF_SIZE 1024
 
@@ -13,8 +14,9 @@ typedef enum lb_algo {
 typedef struct server_info {
     uint32_t server_index;
     int sock;
-    uint32_t addr;
-    uint16_t port;
+    // uint32_t addr;
+    // uint16_t port;
+    struct sockaddr_in saddr;
     uint32_t client_count;
 } ServInfo;
 
@@ -24,6 +26,17 @@ typedef struct resource {
     uint32_t memory;            // Memory 사용률
     struct timeval prv_time;
 } Resrc;
+
+typedef struct pseudo_header
+{
+	u_int32_t saddr;
+	u_int32_t daddr;
+	u_int8_t placeholder;
+	u_int8_t  protocol;
+	u_int16_t tcplen;
+} Pseudo;
+
+unsigned short checksum(__u_short *addr, int len);
 
 struct server_info server_list[SERVER_NUM];
 struct resource resource_list[SERVER_NUM];
@@ -41,7 +54,7 @@ static void *get_resource(void * arg);
 int is_in_server_list(uint32_t addr);
 int get_server_index(uint32_t addr);
 
-void three_way_handshaking_client(int sock, struct server_info server_addr, int server_index, char *datagram);
+void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram);
 void four_way_handshaking_client(struct server_info server, int server_index, char *datagram);
 
 #endif

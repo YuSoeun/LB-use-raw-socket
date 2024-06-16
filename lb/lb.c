@@ -8,14 +8,45 @@
 #include <netinet/tcp.h>
 #include <sys/time.h>
 #include <pthread.h>
+#include <errno.h>
 #include "client_list.h"
 #include "lb.h"
 
 int server_count = 0;
 int count = 0;
 int sock = 0;       // raw socket
+int recv_size = 0;
 
 ClientList * client_list;
+void extract_ip_header(char* buffer);
+void extract_tcp_packet(char* buffer);
+
+// checksum function which returns unsigned short value 
+unsigned short checksum(__u_short *addr, int len)
+{
+        int sum = 0;				// 체크섬 값 계산
+        int left_len = len;			// 아직 처리되지 않은 데이터의 길이
+        __u_short *cur = addr;		// 데이터의 현재 위치
+        __u_short result = 0;		// 최종적으로 반환될 체크섬 값
+ 
+        while (left_len > 1) {
+			sum += *cur;  cur++;
+
+			left_len -= 2;			// unsigned short여서 2빼기
+        }
+	
+		// 데이터 길이가 홀수일 때 마지막 바이트 처리
+        if (left_len == 1) {
+			result = *(__u_char *)cur ;
+			sum += result;
+        }
+
+		// 32비트 합산 값을 16비트로 축소 (오버플로우 처리를 위해)
+       	sum = (sum >> 16) + (sum & 0xffff);       // masking
+        result = ~sum;
+
+        return(result);
+}
 
 int main(int argc, char *argv[])
 {
@@ -37,22 +68,31 @@ int main(int argc, char *argv[])
     // Source IP
 	struct sockaddr_in saddr;
 	saddr.sin_family = AF_INET;
-	saddr.sin_port = htons(rand() % 65535);
+	saddr.sin_port = htons(atoi(argv[2]));
 	if (inet_pton(AF_INET, argv[1], &saddr.sin_addr) != 1) {
 		perror("Source IP configuration failed\n");
 		exit(EXIT_FAILURE);
 	}
+    
+    set_servers();
+
+    // three_way_handshaking, socket option 설정 (headers are included in the packet)
+	int one = 1;
+	const int *val = &one;
+	if (setsockopt(sock, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) == -1) {
+		perror("setsockopt(IP_HDRINCL, 1)");
+		exit(EXIT_FAILURE);
+	}
 
     // 서버들과 연결
-    set_servers();
-    connect_with_servers();
+    // connect_with_servers();
 
     // 서버의 리소스 정보를 받아오는 쓰레드 생성
-    int resource_based = 0;
-    pthread_t thread_id;
-    if (algo == 2) {
-        resource_based = 1;
-    }
+    // int resource_based = 0;
+    // pthread_t thread_id;
+    // if (algo == 2) {
+    //     resource_based = 1;
+    // }
 
     // pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
 
@@ -62,7 +102,7 @@ int main(int argc, char *argv[])
     
     char datagram[BUF_SIZE];
     while (1) {
-        recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL);
+        recv_size = recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL);
         
         // IP 헤더와 TCP 헤더 추출
         struct iphdr *iph = (struct iphdr *)datagram;
@@ -73,10 +113,10 @@ int main(int argc, char *argv[])
             continue;
 
         // syn이면 클라이언트의 3way handshaking 요청
-        if (tcph->syn == 1 && !tcph->ack) {
+        if (tcph->syn == 1 && !tcph->ack && tcph->dest == lb_port) {
             printf("start three-way-handshaking\n");
             int server_index = select_server(algo);
-            three_way_handshaking_client(sock, server_list[server_index], server_index, datagram);
+            three_way_handshaking_client(sock, server_list[server_index].saddr, server_index, datagram);
         }
         
     //     // fin이면 클라이언트의 4way handshaking 요청
@@ -93,13 +133,19 @@ int main(int argc, char *argv[])
 void set_servers()
 {
     printf("set_servers\n");
+    char *ip = "127.0.0.1";
 
     for (int i = 0; i < SERVER_NUM; i++) {
         server_list[i].server_index = i;
         server_list[i].client_count = 0;
-        server_list[i].addr = inet_addr("127.0.0.1");
-        server_list[i].port = htons(8888);
         server_list[i].sock = -1;
+
+        server_list[i].saddr.sin_family = AF_INET;
+        server_list[i].saddr.sin_port = htons(8888);
+        if (inet_pton(AF_INET, ip, &server_list[i].saddr.sin_addr.s_addr) != 1) {
+            perror("Source IP configuration failed\n");
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
@@ -120,8 +166,8 @@ void connect_with_servers()
         struct sockaddr_in server_addr;
         memset(&server_addr, 0, sizeof(server_addr));
         server_addr.sin_family = AF_INET;
-        server_addr.sin_addr.s_addr = cur_svr->addr;
-        server_addr.sin_port = cur_svr->port; // 포트 번호 설정
+        server_addr.sin_addr.s_addr = cur_svr->saddr.sin_addr.s_addr;
+        server_addr.sin_port = cur_svr->saddr.sin_port; // 포트 번호 설정
 
         // 서버에 연결 시도
         if (connect(tcp_sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -142,8 +188,8 @@ void connect_with_servers()
 // void remove_from_server_list(uint32_t server_index) {
 //     for (int i = 0; i < SERVER_NUM; i++) {
 //         if (server_list[i].server_index == server_index) {
-//             server_list[i].addr = 0;
-//             server_list[i].port = 0;
+//             server_list[i].saddr.sin_addr.s_addr = 0;
+//             server_list[i].saddr.sin_port = 0;
 //             server_list[i].client_count = 0;
 //             break;
 //         }
@@ -201,7 +247,7 @@ static void *get_resource(void * arg)
 int is_in_server_list(uint32_t addr)
 {
     for (int i = 0; i < SERVER_NUM; i++) {
-        if (server_list[i].addr == addr) {
+        if (server_list[i].saddr.sin_addr.s_addr == addr) {
             return 1;
         }
     }
@@ -211,7 +257,7 @@ int is_in_server_list(uint32_t addr)
 int get_server_index(uint32_t addr)
 {
     for (int i = 0; i < SERVER_NUM; i++) {
-        if (server_list[i].addr == addr) {
+        if (server_list[i].saddr.sin_addr.s_addr == addr) {
             return server_list[i].server_index;
         }
     }
@@ -256,25 +302,50 @@ void change_header(char *datagram, int server_index)
 {
     struct iphdr *iph = (struct iphdr *)datagram;
     struct tcphdr *tcph = (struct tcphdr *)(datagram + (iph->ihl * 4));
+    Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
+	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+
+    iph->saddr = iph->daddr;
+    tcph->th_sport = tcph->dest;
     
     struct server_info server = server_list[server_index];
-    iph->daddr = server.addr;
-    tcph->dest = htons(server.port);
+    iph->daddr = server.saddr.sin_addr.s_addr;
+    tcph->dest = server.saddr.sin_port;
+
+   
+    if (pseudo == NULL) {
+		perror("malloc: ");
+		exit(EXIT_FAILURE);
+	}
+
+    memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
+	memcpy(pseudo_datagram + sizeof(Pseudo), tcph, sizeof(struct tcphdr) + OPT_SIZE);
+    tcph->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	iph->check = checksum((__u_short *)datagram, recv_size);
+
+    // set TCP options
+	free(pseudo);
+	free(pseudo_datagram);
 }
 
-void three_way_handshaking_client(int sock, struct server_info server_addr, int server_index, char *datagram)
+void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram)
 {
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(struct sockaddr_in);
 
     // SYN
     change_header(datagram, server_index);          // SYN 패킷을 설정하는 사용자 정의 함수
-    if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    extract_ip_header(datagram);
+	struct iphdr *ip = (struct iphdr*)datagram;
+    
+    int size;
+    if ((size = sendto(sock, datagram, recv_size, 0, (struct sockaddr *)&server_addr, sizeof(struct sockaddr))) < 0) {
         perror("sendto failed");
     }
+    printf("send size = %d %d\n", size, errno);
 
-//     // ACK
-//     while (1) {
+    // ACK
+    while (1) {
 //         if (recvfrom(sock, datagram, BUF_SIZE, 0, (struct sockaddr *)&client_addr, &addr_len) < 0) {
 //             perror("recvfrom failed");
 //         }
@@ -289,7 +360,7 @@ void three_way_handshaking_client(int sock, struct server_info server_addr, int 
 //             break;
 //         }
  
-//    }
+   }
 
 //     ClientNode * newnode =  InitNodeInfo(server_index, server_list[server_index].addr, server_list[server_index].port);
 //     InsertNode(newnode);
@@ -302,7 +373,7 @@ void three_way_handshaking_client(int sock, struct server_info server_addr, int 
 
 //     // FIN
 //     change_header(datagram); // FIN 패킷 설정
-//     if (sendto(server_list[server_index].sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server.addr, sizeof(server.addr)) < 0) {
+//     if (sendto(server_list[server_index].sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server.addr.saddr.sin_addr.s_addr, sizeof(server.addr.saddr.sin_addr.s_addr)) < 0) {
 //         perror("sendto failed");
 //     }
 
@@ -314,9 +385,9 @@ void three_way_handshaking_client(int sock, struct server_info server_addr, int 
 //         struct iphdr *ip = (struct iphdr *)datagram;
 //         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-//         if (ip->saddr == server.addr.sin_addr.s_addr && tcp->ack == 1) {
+//         if (ip->saddr == server.addr.saddr.sin_addr.s_addr.sin_addr.s_addr && tcp->ack == 1) {
 //             change_header(datagram); // ACK 패킷 설정
-//             if (sendto(server_list[server_index], datagram, strlen(datagram), 0, (struct sockaddr *)&server.addr, sizeof(server.addr)) < 0) {
+//             if (sendto(server_list[server_index], datagram, strlen(datagram), 0, (struct sockaddr *)&server.addr.saddr.sin_addr.s_addr, sizeof(server.addr.saddr.sin_addr.s_addr)) < 0) {
 //                 perror("sendto failed");
 //             }
 //             break;
@@ -351,4 +422,41 @@ void * send_data_to_server(void * arg)
     //         return;
     //     }
     // }
+}
+
+// IP 헤더와 내용 추출
+void extract_ip_header(char* buffer) {
+    // 네트워크 주소 변환 사용해야함 (network byte 순서 -> host byte 순서)
+    struct iphdr *ip = (struct iphdr*)(buffer);
+    printf("-------------------------------------------- \n");
+    printf("IP Header\n");
+    printf("   |-Source IP               : %s\n", inet_ntoa(*(struct in_addr*)&ip->saddr));
+    printf("   |-Destination IP          : %s\n", inet_ntoa(*(struct in_addr*)&ip->daddr));
+    printf("   |-Protocol                : %d\n", ip->protocol);
+
+    if (ip->protocol == IPPROTO_TCP) {
+	extract_tcp_packet(buffer);
+    } else {
+        printf("Not TCP Packet\n");
+    }
+}
+
+// TCP Packet과 내용 추출
+void extract_tcp_packet(char* buffer) {
+    struct tcphdr *tcp = (struct tcphdr*)(buffer + sizeof(struct iphdr));
+    printf("-------------------------------------------- \n");
+    printf("TCP Packet\n");
+    printf("   |-Source Port             : %d\n", ntohs(*(uint16_t *)&tcp->th_sport));
+    printf("   |-Destination Port        : %d\n", ntohs(*(uint16_t *)&tcp->th_dport));
+    printf("   |-Sequence Number         : %d\n", ntohs(*(uint16_t *)&tcp->th_seq));
+    printf("   |-Acknowledge Number      : %d\n", ntohs(*(uint16_t *)&tcp->th_ack));
+
+    printf("   |-Flags                   :");
+    if (tcp->fin)  printf(" FIN");
+    if (tcp->syn)  printf(" SYN");
+    if (tcp->rst)  printf(" RST");
+    if (tcp->psh)  printf(" PSH");
+    if (tcp->ack)  printf(" ACK");
+    if (tcp->urg)  printf(" URG");
+    printf("\n");
 }
