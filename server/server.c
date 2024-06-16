@@ -173,7 +173,7 @@ void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *dat
     socklen_t addr_len = sizeof(struct sockaddr_in);
 	struct iphdr *ip = (struct iphdr*)datagram;
 
-    // SYNACK send
+    // SYN ACK send
     change_header(datagram, lb_adr);
     printf("Server에서 SYNACK 헤더 바꾼 것\n");
     extract_ip_header(datagram);
