@@ -263,10 +263,10 @@ void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in dad
 	ip->frag_off = htons(1 << 14);
 	ip->ttl = 64;
 	ip->protocol = IPPROTO_TCP;
-	ip->daddr = ip->saddr;
+	ip->daddr = daddr.sin_addr.s_addr;
 	ip->saddr = saddr.sin_addr.s_addr;
 
-	tcp->dest = tcp->source;
+	tcp->dest = daddr.sin_port;
 	tcp->source = saddr.sin_port;
 	tcp->seq = htonl(ntohl(seq) + 1);
 	tcp->ack_seq = htonl(ntohl(ack_seq) + 1);

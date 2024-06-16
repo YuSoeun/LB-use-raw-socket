@@ -366,6 +366,7 @@ void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int 
 
     // SYN
     change_header(datagram, server_index);          // SYN 패킷을 설정하는 사용자 정의 함수
+    printf("LB에서 SYN 헤더 바꾼 것\n");
     extract_ip_header(datagram);
 	struct iphdr *ip = (struct iphdr*)datagram;
     
@@ -377,20 +378,22 @@ void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int 
 
     // ACK
     while (1) {
-//         if (recvfrom(sock, datagram, BUF_SIZE, 0, (struct sockaddr *)&client_addr, &addr_len) < 0) {
-//             perror("recvfrom failed");
-//         }
-//         struct iphdr *ip = (struct iphdr *)datagram;
-//         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
+        if (recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL) < 0) {
+            perror("recvfrom failed");
+        }
+        struct iphdr *ip = (struct iphdr *)datagram;
+        struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-//         if (ip->saddr == server_addr.sin_addr.s_addr && tcp->syn == 1 && tcp->ack == 1) {
-//             change_header(datagram); // ACK 패킷을 설정하는 사용자 정의 함수
-//             if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-//                 perror("sendto failed");
-//             }
-//             break;
-//         }
- 
+        if (ip->daddr != lb_addr && tcp->dest != lb_port)
+            continue;
+
+        if (tcp->syn != 1 && tcp->ack == 1 && tcp->fin != 1 && tcp->rst != 1) {
+            change_header(datagram); // ACK 패킷을 설정하는 사용자 정의 함수
+            if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+                perror("sendto failed");
+            }
+            break;
+        }
    }
 
 //     ClientNode * newnode =  InitNodeInfo(server_index, server_list[server_index].addr, server_list[server_index].port);

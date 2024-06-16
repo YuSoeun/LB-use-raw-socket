@@ -13,6 +13,7 @@
 #include "cpu.h"
 
 #define BUF_SIZE 1024
+#define LB_PORT 7777
 
 struct sockaddr_in serv_adr;
 
@@ -102,11 +103,11 @@ int main(int argc, char *argv[])
 		printf("Connected client %d \n", i+1);
 	
 	// get resource 알고리즘을 사용하는 LB인지 받기
-	// int is_get_resource = 0;
-	// if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
-	// 	perror("read failed in get resource");
-	// }
-	// printf("is_get_resource %d \n", is_get_resource);
+	int is_get_resource = 0;
+	if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
+		perror("read failed in get resource");
+	}
+	printf("is_get_resource %d \n", is_get_resource);
 	
 	// resource 보내주는 thread 생성
 	// if (is_get_resource) {
@@ -146,12 +147,11 @@ int main(int argc, char *argv[])
         struct iphdr *ip = (struct iphdr *)datagram;
         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-		if (ip->saddr != lb_adr.sin_addr.s_addr && tcp->dest != serv_adr.sin_port)
+		if (ip->daddr != serv_adr.sin_addr.s_addr && tcp->dest != serv_adr.sin_port)
 			continue;
 
-		// three way handshaking
-		if (tcp->syn == 1 && !tcp->ack) {
-			printf("datagram(%d): %s\n", str_len, datagram);
+		// SYN -three way handshaking
+		if (tcp->source == htons(LB_PORT) && tcp->syn == 1 && !tcp->ack) {
             three_way_handshaking_client(sock, lb_adr, datagram);
         }
 
@@ -175,6 +175,8 @@ void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *dat
 
     // SYNACK send
     change_header(datagram, lb_adr);
+    printf("Server에서 SYNACK 헤더 바꾼 것\n");
+    extract_ip_header(datagram);
     if (sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
         perror("sendto failed");
     }
