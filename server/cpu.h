@@ -1,6 +1,7 @@
 #ifndef __CPU_H__
 #define __CPU_H__
 
+
 typedef struct {
     unsigned long long user, nice, system, idle, iowait, irq, softirq, steal;
 } CpuUsage;
