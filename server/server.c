@@ -143,15 +143,15 @@ int main(int argc, char *argv[])
         struct iphdr *ip = (struct iphdr *)datagram;
         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-		// if (ip->daddr != serv_adr.sin_addr.s_addr || tcp->dest != serv_adr.sin_port)
-		// 	continue;
+		if (ip->daddr != serv_adr.sin_addr.s_addr || tcp->dest != serv_adr.sin_port)
+			continue;
 
     	extract_ip_header(datagram);
 		// SYN -three way handshaking
-		if (tcp->source == htons(LB_PORT) && tcp->syn && !tcp->ack) {
-            printf("start 3-way-handshakg\n");
-            three_way_handshaking_client(sock, lb_adr, datagram);
-        }
+		// if (tcp->source == htons(LB_PORT) && tcp->syn && !tcp->ack) {
+        //     printf("start 3-way-handshakg\n");
+        //     three_way_handshaking_client(sock, lb_adr, datagram);
+        // }
 
 		if (tcp->psh && tcp->ack) {
 			printf("data transfered\n");
