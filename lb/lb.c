@@ -17,6 +17,8 @@ int count = 0;
 int sock = 0;       // raw socket
 int recv_size = 0;
 struct sockaddr_in saddr;
+uint32_t lb_addr;
+uint16_t lb_port;
 
 ClientList * client_list;
 void extract_ip_header(char* buffer);
@@ -108,7 +110,7 @@ int main(int argc, char *argv[])
         struct tcphdr *tcph = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
         // LB로 오는 데이터가 아니라면 continue
-        if (iph->daddr != lb_addr && tcph->dest != lb_port)
+        if (iph->daddr != lb_addr || tcph->dest != lb_port)
             continue;
 
         int server_index = 0;

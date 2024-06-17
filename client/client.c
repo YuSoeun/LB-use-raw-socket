@@ -80,8 +80,8 @@ int main(int argc, char *argv[])
 		perror("setsockopt(IP_HDRINCL, 1)");
 		exit(EXIT_FAILURE);
 	}
-	struct tcphdr *tcp;
-	memcpy(tcp, three_way_handshaking(sock, saddr, daddr), BUF_SIZE);
+	struct tcphdr *tcp = (struct tcphdr *)malloc(sizeof(struct tcphdr));
+	memcpy(tcp, three_way_handshaking(sock, saddr, daddr), sizeof(struct tcphdr));
 	char message[BUF_SIZE];
 	// Data transfer 
 	uint32_t next_seq = tcp->seq;

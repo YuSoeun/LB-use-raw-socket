@@ -38,8 +38,6 @@ unsigned short checksum(__u_short *addr, int len);
 
 struct server_info server_list[SERVER_NUM];
 struct resource resource_list[SERVER_NUM];
-uint32_t lb_addr;
-uint16_t lb_port;
 
 void set_servers();
 void connect_with_servers();
