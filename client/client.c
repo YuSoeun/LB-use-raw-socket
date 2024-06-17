@@ -86,16 +86,16 @@ int main(int argc, char *argv[])
 	// Data transfer 
 	uint32_t next_seq = tcp->seq;
 	uint32_t next_ack = tcp->ack_seq;
-	// while (1) 
-	// {
-	// 	fputs("Input message(Q to quit): ", stdout);
-	// 	fgets(message, BUF_SIZE, stdin);
+	while (1)
+	{
+		fputs("Input message(Q to quit): ", stdout);
+		fgets(message, BUF_SIZE, stdin);
 		
-	// 	if (!strcmp(message,"q\n") || !strcmp(message,"Q\n"))
-	// 		break;
+		if (!strcmp(message,"q\n") || !strcmp(message,"Q\n"))
+			break;
 
-	// 	data_transfer(sock, saddr, daddr, message, &next_seq, &next_ack);
-	// }
+		data_transfer(sock, saddr, daddr, message, &next_seq, &next_ack);
+	}
 
 	close(sock);
 	return 0;
