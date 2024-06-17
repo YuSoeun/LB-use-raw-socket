@@ -434,7 +434,7 @@ void change_header_ack(char *datagram, int server_index)
 void change_header_data(char *datagram, int server_index)
 {
     struct iphdr *ip = (struct iphdr *)datagram;
-    struct tcphdr *tcp = (struct tcphdr *)(datagram + (ip->ihl * 4));
+    struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
     struct sockaddr_in serv_adr = server_list[server_index].saddr;
 
     Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
@@ -473,20 +473,24 @@ void change_header_data(char *datagram, int server_index)
 	tcp->window = htons(5840);		// window size
 	tcp->urg_ptr = 0;
 
+    int data_len = recv_size - 40;
+    printf("data_len = %d\n", data_len);
+
 	pseudo->saddr = ip->saddr;
 	pseudo->daddr = ip->daddr;
 	pseudo->placeholder = 0;
 	pseudo->protocol = IPPROTO_TCP;
-	pseudo->tcplen = htons(recv_size);
+	pseudo->tcplen = htons(sizeof(struct tcphdr) + OPT_SIZE + data_len);
 
     tcp->check = 0;
     ip->check = 0;
 
-	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
-	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, recv_size);
+    memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
+	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE + data_len);
 	
-    tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + recv_size);
+    tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE + data_len);
 	ip->check = checksum((__u_short *)datagram, ip->tot_len);
+    printf("여기까지\n");
 
 	// set TCP options
 	free(pseudo);
