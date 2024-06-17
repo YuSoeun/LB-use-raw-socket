@@ -73,8 +73,8 @@ int main(int argc, char *argv[])
 	struct sockaddr_in lb_adr;
 	socklen_t lb_adr_sz;
 	
-	if (argc != 2) {
-		printf("Usage : %s <port>\n", argv[0]);
+	if (argc != 3) {
+		printf("Usage : %s <src_ip> <src_port>\n", argv[0]);
 		exit(1);
 	}
 	
@@ -84,10 +84,15 @@ int main(int argc, char *argv[])
 
 	setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option) );
 	
+	// Source IP
 	memset(&serv_adr, 0, sizeof(serv_adr));
 	serv_adr.sin_family = AF_INET;
-	serv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serv_adr.sin_port = htons(atoi(argv[1]));
+	serv_adr.sin_port = htons(atoi(argv[2]));
+
+	if (inet_pton(AF_INET, argv[1], &serv_adr.sin_addr) != 1) {
+            perror("Source IP configuration failed\n");
+            exit(EXIT_FAILURE);
+        }
 
 	if (bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1)
 		error_handling("bind() error");
@@ -122,15 +127,6 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
 	}
 
-	// Source IP
-	struct sockaddr_in saddr;
-	saddr.sin_family = AF_INET;
-	saddr.sin_port = htons(atoi(argv[1]));
-	if (inet_pton(AF_INET, "127.0.0.1", &saddr.sin_addr) != 1) {
-		perror("Source IP configuration failed\n");
-		exit(EXIT_FAILURE);
-	}
-
 	// three_way_handshaking, socket option 설정 (headers are included in the packet)
 	int one = 1;
 	const int *val = &one;
@@ -147,16 +143,22 @@ int main(int argc, char *argv[])
         struct iphdr *ip = (struct iphdr *)datagram;
         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-		if (ip->daddr != serv_adr.sin_addr.s_addr || tcp->dest != serv_adr.sin_port)
-			continue;
+		// if (ip->daddr != serv_adr.sin_addr.s_addr || tcp->dest != serv_adr.sin_port)
+		// 	continue;
 
+    	extract_ip_header(datagram);
 		// SYN -three way handshaking
-		if (tcp->syn == 1 && !tcp->ack) {
+		if (tcp->source == htons(LB_PORT) && tcp->syn && !tcp->ack) {
+            printf("start 3-way-handshakg\n");
             three_way_handshaking_client(sock, lb_adr, datagram);
         }
 
+		if (tcp->psh && tcp->ack) {
+			printf("data transfered\n");
+		}
+
 		//     // fin이면 클라이언트의 4way handshaking 요청
-		//     else if (tcp->fin == 1 && !tcp->ack) {
+		//     else if (tcp->fin && !tcp->ack) {
 		//         int server_index = select_server(algo);
 		//         pthread_t thread_id;
 		//         four_way_handshaking_client(server_list[server_index], server_index, datagram);

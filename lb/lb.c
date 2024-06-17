@@ -123,10 +123,10 @@ int main(int argc, char *argv[])
         }
 
         // data request면 server로 전송
-        // if (tcph->psh && tcph->ack) {
-        //     printf("send data request\n");
-        //     send_data_to_server(sock, server_list[server_index].saddr, server_index, datagram);
-        // }
+        if (tcph->psh && tcph->ack) {
+            printf("send data request\n");
+            send_data_to_server(sock, server_list[server_index].saddr, server_index, datagram);
+        }
         
     //     // fin이면 클라이언트의 4way handshaking 요청
     //     else if (tcph->fin == 1 && !tcph->ack) {
