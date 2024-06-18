@@ -12,16 +12,15 @@
 #include "client_list.h"
 #include "lb.h"
 
-#define CLNT_NUM 2
-
 int server_count = 0;
+int client_count = 0;
 int count = 0;
 int sock = 0;       // raw socket
 int recv_size = 0;
 struct sockaddr_in saddr;
 int ports[CLNT_NUM] = {8888, 4444};
 
-ClientList * client_list;
+ClntInfo * client_list;
 void extract_ip_header(char* buffer);
 void extract_tcp_packet(char* buffer);
 
@@ -99,6 +98,9 @@ int main(int argc, char *argv[])
     pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
     
     char datagram[BUF_SIZE];
+    int server_index = 0;
+    client_list = (ClntInfo *)malloc(sizeof(ClntInfo) * CLNT_NUM);
+
     while (1) {
         recv_size = recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL);
         
@@ -110,18 +112,26 @@ int main(int argc, char *argv[])
         if (iph->daddr != lb_addr || tcph->dest != lb_port)
             continue;
 
-        int server_index = 0;
-
         // syn이면 클라이언트의 3way handshaking 요청
         if (tcph->syn && !tcph->ack && !tcph->fin) {
             printf("start three-way-handshaking\n");
             server_index = select_server(algo);
             three_way_handshaking_client(sock, server_list[server_index].saddr, server_index, datagram);
+            
+            // client list에 넣기
+            client_list[client_count].server_index = server_index;
+            client_list[client_count].saddr.sin_addr.s_addr = tcph->source;
+            client_list[client_count].saddr.sin_port = tcph->source;
+            client_count++;
         }
 
         // data request면 server로 전송
         if (tcph->psh && tcph->ack) {
             printf("send data request\n");
+            for (int i = 0; i < client_count; i++) {
+                if (client_list[i].saddr.sin_port == tcph->source)
+                server_index = client_list[i].server_index;
+            }
             send_data_to_server(sock, server_list[server_index].saddr, server_index, datagram);
         }
         
