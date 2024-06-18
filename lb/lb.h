@@ -2,7 +2,7 @@
 #define __LB_H__
 
 #define OPT_SIZE 0
-#define SERVER_NUM 1
+#define SERVER_NUM 2
 #define BUF_SIZE 1024
 
 uint32_t lb_addr;
