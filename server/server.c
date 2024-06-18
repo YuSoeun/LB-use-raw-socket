@@ -158,8 +158,9 @@ int main(int argc, char *argv[])
 			extract_ip_header(datagram);
 			strcpy(data, datagram + sizeof(struct iphdr) + sizeof(struct tcphdr));
 			printf("receive msg: %s\n", data);
+			
 			// change_header_data(datagram, lb_adr, str_len-40);
-			// printf("\nServer에서 SYNACK 헤더 바꾼 것\n");
+			// printf("\nServer에서 data ACK 헤더 바꾼 것\n");
 			// extract_ip_header(datagram);
 			// if (sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
 			// 	perror("sendto failed");
@@ -309,7 +310,7 @@ void change_header(char *datagram, struct sockaddr_in lb_adr)
 void change_header_data(char *datagram, struct sockaddr_in lb_adr, int data_len)
 {
 	struct iphdr *ip = (struct iphdr *)datagram;
-    struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
+    struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr) + data_len);
 
     Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
 	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE + data_len);
