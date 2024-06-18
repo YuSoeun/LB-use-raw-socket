@@ -139,6 +139,11 @@ int main(int argc, char *argv[])
         
         // fin이면 클라이언트의 4way handshaking 요청
         else if (tcph->fin == 1 && !tcph->ack) {
+            for (int i = 0; i < client_count; i++) {
+                if (client_list[i].saddr.sin_port == tcph->source)
+                server_index = client_list[i].server_index;
+            }
+            server_list[server_index].client_count--;
             printf("start four_way_handshaking_client\n");
             four_way_handshaking_client(sock, server_list[server_index].saddr, server_index, datagram);
         }
