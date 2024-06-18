@@ -88,8 +88,10 @@ int main(int argc, char *argv[])
 	uint32_t next_ack = tcp->ack_seq;
 	while (1)
 	{
+		memset(message, 0, BUF_SIZE);
 		fputs("Input message(Q to quit): ", stdout);
 		fgets(message, BUF_SIZE, stdin);
+		message[strlen(message)] = '\0';
 		
 		if (!strcmp(message,"q\n") || !strcmp(message,"Q\n"))
 			break;
@@ -199,12 +201,12 @@ void data_transfer(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr,
 			}
 		}
 
-		char data[BUF_SIZE];
-		strcpy(data, message + sizeof(struct iphdr) + sizeof(struct tcphdr));
+		// char data[BUF_SIZE];
+		// strcpy(data, message + sizeof(struct iphdr) + sizeof(struct tcphdr));
 
 		extract_ip_header(message);
-		printf("receive size: %d\n", size);
-		printf("receive msg: %s\n", data);
+		// printf("receive size: %d\n", size);
+		// printf("receive msg: %s\n", data);
 
 		*next_seq = recv_tcp->ack_seq;
 		*next_ack = recv_tcp->seq;
@@ -323,7 +325,7 @@ void set_ack_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in dad
 
 void set_data_packet(struct iphdr *ip, struct tcphdr *tcp, struct sockaddr_in saddr, struct sockaddr_in daddr, char *datagram, char* msg, uint32_t* seq, uint32_t* ack_seq, uint16_t id)
 {
-	int data_len = strlen(msg);
+	int data_len = strlen(msg)+1;
 	printf("data_len: %d\n", data_len);
 	memcpy(datagram + sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE, msg, data_len);
 	Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
