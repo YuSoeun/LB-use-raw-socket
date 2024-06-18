@@ -17,8 +17,6 @@ int count = 0;
 int sock = 0;       // raw socket
 int recv_size = 0;
 struct sockaddr_in saddr;
-uint32_t lb_addr;
-uint16_t lb_port;
 
 ClientList * client_list;
 void extract_ip_header(char* buffer);

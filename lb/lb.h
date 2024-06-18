@@ -5,6 +5,9 @@
 #define SERVER_NUM 1
 #define BUF_SIZE 1024
 
+uint32_t lb_addr;
+uint16_t lb_port;
+
 typedef enum lb_algo {
     ROUND_ROBIN,
     LEAST_CONNECTION,
