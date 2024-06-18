@@ -66,7 +66,7 @@ unsigned short checksum(__u_short *addr, int len)
 int main(int argc, char *argv[])
 {
 	int serv_sock, lb_sock;
-	char message[BUF_SIZE] = "정보를 보내겠다.";
+	char message[BUF_SIZE];
 	int str_len, i;
 	int option = 1;
 	
@@ -82,17 +82,13 @@ int main(int argc, char *argv[])
 	if (serv_sock == -1)
 		error_handling("socket() error");
 
-	setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option) );
+	setsockopt(serv_sock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
 	
 	// Source IP
 	memset(&serv_adr, 0, sizeof(serv_adr));
 	serv_adr.sin_family = AF_INET;
+	serv_adr.sin_addr.s_addr = inet_addr(argv[1]);
 	serv_adr.sin_port = htons(atoi(argv[2]));
-
-	if (inet_pton(AF_INET, argv[1], &serv_adr.sin_addr) != 1) {
-            perror("Source IP configuration failed\n");
-            exit(EXIT_FAILURE);
-        }
 
 	if (bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1)
 		error_handling("bind() error");
@@ -109,10 +105,10 @@ int main(int argc, char *argv[])
 	
 	// get resource 알고리즘을 사용하는 LB인지 받기
 	int is_get_resource = 0;
-	if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
-		perror("read failed in get resource");
-	}
-	printf("is_get_resource %d \n", is_get_resource);
+	// if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
+	// 	perror("read failed in get resource");
+	// }
+	// printf("is_get_resource %d \n", is_get_resource);
 	
 	// resource 보내주는 thread 생성
 	// if (is_get_resource) {
@@ -148,21 +144,28 @@ int main(int argc, char *argv[])
 
     	extract_ip_header(datagram);
 		// SYN -three way handshaking
-		// if (tcp->source == htons(LB_PORT) && tcp->syn && !tcp->ack) {
-        //     printf("start 3-way-handshakg\n");
-        //     three_way_handshaking_client(sock, lb_adr, datagram);
-        // }
+		if (tcp->syn && !tcp->ack) {
+            printf("start 3-way-handshakg\n");
+            three_way_handshaking_client(sock, lb_adr, datagram);
+        }
 
 		if (tcp->psh && tcp->ack) {
 			printf("data transfered\n");
+			// TODO: data packet send
+			change_header(datagram, lb_adr);
+			printf("Server에서 SYNACK 헤더 바꾼 것\n");
+			extract_ip_header(datagram);
+			// if (sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
+			// 	perror("sendto failed");
+			// }
 		}
 
-		//     // fin이면 클라이언트의 4way handshaking 요청
-		//     else if (tcp->fin && !tcp->ack) {
-		//         int server_index = select_server(algo);
-		//         pthread_t thread_id;
-		//         four_way_handshaking_client(server_list[server_index], server_index, datagram);
-		//     }
+	// 	//     // fin이면 클라이언트의 4way handshaking 요청
+	// 	//     else if (tcp->fin && !tcp->ack) {
+	// 	//         int server_index = select_server(algo);
+	// 	//         pthread_t thread_id;
+	// 	//         four_way_handshaking_client(server_list[server_index], server_index, datagram);
+	// 	//     }
 	}
 
 	close(lb_sock);
@@ -195,14 +198,14 @@ void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *dat
 		if (ip->saddr != lb_adr.sin_addr.s_addr && tcp->dest != serv_adr.sin_port)
 			continue;
 
-        // if (tcp->syn != 1 && tcp->ack == 1) {
-    	// 	extract_ip_header(datagram);
+        if (tcp->syn != 1 && tcp->ack == 1) {
+    		extract_ip_header(datagram);
         //     change_header(datagram, lb_adr); // ACK 패킷을 설정하는 사용자 정의 함수
         //     if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         //         perror("sendto failed");
         //     }
-        //     break;
-        // }
+            break;
+        }
    }
 
 //     ClientNode * newnode =  InitNodeInfo(server_index, server_list[server_index].addr, server_list[server_index].port);
@@ -260,14 +263,75 @@ void change_header(char *datagram, struct sockaddr_in lb_adr)
 	ip->saddr = lb_adr.sin_addr.s_addr;
 
 	tcp->dest = tcp->source;
-	tcp->source = lb_adr.sin_port;
+	tcp->source = htons(LB_PORT);
 	tcp->seq = tcp->seq;
 	tcp->ack_seq = htonl(0);
 
 	tcp->doff = 5;
 	tcp->res1 = 0;
 	tcp->urg = 0;
-	tcp->ack = 0;
+	tcp->ack = 1;
+	tcp->psh = 0;
+	tcp->rst = 0;
+	tcp->syn = 1;
+	tcp->fin = 0;
+
+	tcp->window = htons(5840);		// window size
+	tcp->urg_ptr = 0;
+
+	pseudo->saddr = ip->saddr;
+	pseudo->daddr = ip->daddr;
+	pseudo->placeholder = 0;
+	pseudo->protocol = IPPROTO_TCP;
+	pseudo->tcplen = htons(sizeof(struct tcphdr) + OPT_SIZE);
+
+    tcp->check = 0;
+    ip->check = 0;
+    
+	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
+	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE);
+	
+    tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	ip->check = checksum((__u_short *)datagram, ip->tot_len);
+
+	// set TCP options
+	free(pseudo);
+	free(pseudo_datagram);
+}
+
+void change_data_header(char *datagram, struct sockaddr_in lb_adr)
+{
+	struct iphdr *ip = (struct iphdr *)datagram;
+    struct tcphdr *tcp = (struct tcphdr *)(datagram + (ip->ihl * 4));
+
+    Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
+	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	if (pseudo == NULL) {
+		perror("malloc: ");
+		exit(EXIT_FAILURE);
+	}
+
+	ip->version = 4;
+	ip->ihl = 5;
+	ip->tos = 0;
+	ip->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE;
+
+	ip->id = ip->id;
+	ip->frag_off = htons(1 << 14);
+	ip->ttl = 64;
+	ip->protocol = IPPROTO_TCP;
+	ip->daddr = ip->saddr;
+	ip->saddr = lb_adr.sin_addr.s_addr;
+
+	tcp->dest = tcp->source;
+	tcp->source = htons(LB_PORT);
+	tcp->seq = tcp->seq;
+	tcp->ack_seq = htonl(0);
+
+	tcp->doff = 5;
+	tcp->res1 = 0;
+	tcp->urg = 0;
+	tcp->ack = 1;
 	tcp->psh = 0;
 	tcp->rst = 0;
 	tcp->syn = 1;
