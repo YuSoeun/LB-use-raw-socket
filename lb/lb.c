@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
             
             // client list에 넣기
             client_list[client_count].server_index = server_index;
-            client_list[client_count].saddr.sin_addr.s_addr = iph->sin_addr.s_addr;
+            client_list[client_count].saddr.sin_addr.s_addr = iph->saddr;
             client_list[client_count].saddr.sin_port = tcph->source;
             client_count++;
             server_list[server_index].client_count++;
