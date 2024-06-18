@@ -146,7 +146,7 @@ void set_servers()
         server_list[i].sock = -1;
 
         server_list[i].saddr.sin_family = AF_INET;
-        server_list[i].saddr.sin_port = htons(ports[CLNT_NUM]);
+        server_list[i].saddr.sin_port = htons(ports[i]);
         if (inet_pton(AF_INET, ip, &server_list[i].saddr.sin_addr.s_addr) != 1) {
             perror("Source IP configuration failed\n");
             exit(EXIT_FAILURE);
