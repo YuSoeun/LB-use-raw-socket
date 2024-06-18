@@ -12,11 +12,14 @@
 #include "client_list.h"
 #include "lb.h"
 
+#define CLNT_NUM 2
+
 int server_count = 0;
 int count = 0;
 int sock = 0;       // raw socket
 int recv_size = 0;
 struct sockaddr_in saddr;
+int ports[CLNT_NUM] = {8888, 4444};
 
 ClientList * client_list;
 void extract_ip_header(char* buffer);
@@ -143,7 +146,7 @@ void set_servers()
         server_list[i].sock = -1;
 
         server_list[i].saddr.sin_family = AF_INET;
-        server_list[i].saddr.sin_port = htons(8888);
+        server_list[i].saddr.sin_port = htons(ports[CLNT_NUM]);
         if (inet_pton(AF_INET, ip, &server_list[i].saddr.sin_addr.s_addr) != 1) {
             perror("Source IP configuration failed\n");
             exit(EXIT_FAILURE);
