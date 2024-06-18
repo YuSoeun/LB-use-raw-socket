@@ -57,6 +57,6 @@ int is_in_server_list(uint32_t addr);
 int get_server_index(uint32_t addr);
 
 void three_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram);
-void four_way_handshaking_client(struct server_info server, int server_index, char *datagram);
+void four_way_handshaking_client(int sock, struct sockaddr_in server_addr, int server_index, char *datagram);
 
 #endif
