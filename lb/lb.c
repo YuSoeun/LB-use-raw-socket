@@ -124,7 +124,7 @@ int main(int argc, char *argv[])
             client_list[client_count].saddr.sin_port = tcph->source;
             client_count++;
             server_list[server_index].client_count++;
-            printf("index[%d] client count: %d\n\n", server_index, client_count);
+            printf("index[%d] client count: %d\n\n", server_index, server_list[server_index].client_count);
         }
 
         // data request면 server로 전송
