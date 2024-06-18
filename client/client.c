@@ -14,6 +14,7 @@
 
 struct sockaddr_in saddr;
 struct sockaddr_in daddr;
+void four_way_handshaking(int sock, struct sockaddr_in saddr, struct sockaddr_in daddr);
 
 // checksum function which returns unsigned short value 
 unsigned short checksum(__u_short *addr, int len)
@@ -99,7 +100,7 @@ int main(int argc, char *argv[])
 		data_transfer(sock, saddr, daddr, message, &next_seq, &next_ack);
 	}
 
-	// four_way_handshaking(sock, saddr, daddr), sizeof(struct tcphdr);
+	four_way_handshaking(sock, saddr, daddr);
 
 	close(sock);
 	return 0;
