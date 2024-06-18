@@ -93,11 +93,7 @@ int main(int argc, char *argv[])
     if (algo == 2) {
         resource_based = 1;
     }
-    // pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
-
-    // 서버로 데이터를 전송하는 쓰레드 생성
-    // pthread_t send_thread;
-    // pthread_create(&send_thread, NULL, send_data_to_server, NULL);
+    pthread_create(&thread_id, NULL, &get_resource, (void *)&resource_based);
     
     char datagram[BUF_SIZE];
     while (1) {
@@ -235,14 +231,13 @@ static void *get_resource(void * arg)
             resource_list[serv_index].prv_time = now;
 
             if (resource_based == 1) {
-                // get_resource_data(datagram);
                 double cpu_usage, ram_usage;
                 read(server_list[serv_index].sock, &cpu_usage, sizeof(double));
                 read(server_list[serv_index].sock, &ram_usage, sizeof(double));
 
                 printf("\n------- server resource -------\n");
                 printf("cpu: %.2f%%\n", cpu_usage);
-		        printf("mem: %.2f%%\n", ram_usage);
+		        printf("mem: %.2f%%\n\n", ram_usage);
             }
         }
     }
