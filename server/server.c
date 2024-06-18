@@ -22,6 +22,7 @@ void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *dat
 static void *send_resource(void * arg);
 void change_header(char *datagram, struct sockaddr_in lb_adr);
 void change_header_data(char *datagram, struct sockaddr_in lb_adr, int data_len);
+void change_ack_header(char *datagram, struct sockaddr_in lb_adr);
 void extract_ip_header(char* buffer);
 void extract_tcp_packet(char* buffer);
 
@@ -94,7 +95,7 @@ int main(int argc, char *argv[])
 	if (bind(serv_sock, (struct sockaddr*)&serv_adr, sizeof(serv_adr)) == -1)
 		error_handling("bind() error");
 	
-	if (listen(serv_sock, 5) == -1)
+	if (listen(serv_sock, 1) == -1)
 		error_handling("listen() error");
 	
 	lb_adr_sz = sizeof(lb_adr);
@@ -106,16 +107,16 @@ int main(int argc, char *argv[])
 	
 	// get resource 알고리즘을 사용하는 LB인지 받기
 	int is_get_resource = 0;
-	// if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
-	// 	perror("read failed in get resource");
-	// }
-	// printf("is_get_resource %d \n", is_get_resource);
+	if ((str_len = read(lb_sock, &is_get_resource, sizeof(int))) == 0) {
+		perror("read failed in get resource");
+	}
+	printf("is_get_resource %d \n", is_get_resource);
 	
 	// resource 보내주는 thread 생성
-	// if (is_get_resource) {
-	// 	pthread_t thread_id;
-    // 	pthread_create(&thread_id, NULL, &send_resource, (void *)&lb_sock);
-	// }
+	if (is_get_resource) {
+		pthread_t thread_id;
+    	pthread_create(&thread_id, NULL, &send_resource, (void *)&lb_sock);
+	}
 
 	// raw socket listen
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
@@ -160,6 +161,7 @@ int main(int argc, char *argv[])
 			printf("receive msg: %s\n", data);
 			
 			// change_header_data(datagram, lb_adr, str_len-40);
+			// change_ack_header(datagram, lb_adr);
 			// printf("\nServer에서 data ACK 헤더 바꾼 것\n");
 			// extract_ip_header(datagram);
 			// if (sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
@@ -230,7 +232,7 @@ static void *send_resource(void * arg) {
 		sysinfo(&info);
 
 		get_cpu_usage(&prev);
-		sleep(50); // 50초 대기 후 다시 측정
+		sleep(10); // 10초 대기 후 측정
 		get_cpu_usage(&curr);
 
 		double cpu_usage = calculate_cpu_usage(&prev, &curr);
@@ -241,8 +243,7 @@ static void *send_resource(void * arg) {
 		
 		write(lb_sock, &cpu_usage, sizeof(double));
 		write(lb_sock, &ram_usage, sizeof(double));
-
-		sleep(100);
+		sleep(100); // 100초 대기 후 다시 측정
 	}
 }
 
@@ -361,6 +362,68 @@ void change_header_data(char *datagram, struct sockaddr_in lb_adr, int data_len)
 	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE + data_len);
 	
     tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE + data_len);
+	ip->check = checksum((__u_short *)datagram, ip->tot_len);
+
+	// set TCP options
+	free(pseudo);
+	free(pseudo_datagram);
+}
+
+void change_ack_header(char *datagram, struct sockaddr_in lb_adr)
+{
+	struct iphdr *ip = (struct iphdr *)datagram;
+    struct tcphdr *tcp = (struct tcphdr *)(datagram + (ip->ihl * 4));
+
+    Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
+	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	if (pseudo == NULL) {
+		perror("malloc: ");
+		exit(EXIT_FAILURE);
+	}
+
+	ip->version = 4;
+	ip->ihl = 5;
+	ip->tos = 0;
+	ip->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE;
+
+	ip->id = ip->id;
+	ip->frag_off = htons(1 << 14);
+	ip->ttl = 64;
+	ip->protocol = IPPROTO_TCP;
+	ip->daddr = ip->saddr;
+	ip->saddr = lb_adr.sin_addr.s_addr;
+
+	tcp->dest = tcp->source;
+	tcp->source = htons(LB_PORT);
+	uint32_t temp = tcp->seq;
+	tcp->seq = tcp->ack_seq;
+	tcp->ack_seq = tcp->seq;
+
+	tcp->doff = 5;
+	tcp->res1 = 0;
+	tcp->urg = 0;
+	tcp->ack = 1;
+	tcp->psh = 0;
+	tcp->rst = 0;
+	tcp->syn = 0;
+	tcp->fin = 0;
+
+	tcp->window = htons(5840);		// window size
+	tcp->urg_ptr = 0;
+
+	pseudo->saddr = ip->saddr;
+	pseudo->daddr = ip->daddr;
+	pseudo->placeholder = 0;
+	pseudo->protocol = IPPROTO_TCP;
+	pseudo->tcplen = htons(sizeof(struct tcphdr) + OPT_SIZE);
+
+    tcp->check = 0;
+    ip->check = 0;
+    
+	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
+	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE);
+	
+    tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
 	ip->check = checksum((__u_short *)datagram, ip->tot_len);
 
 	// set TCP options
