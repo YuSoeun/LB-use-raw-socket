@@ -21,6 +21,7 @@ void error_handling(char *message);
 void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *datagram);
 static void *send_resource(void * arg);
 void change_header(char *datagram, struct sockaddr_in lb_adr);
+void change_header_data(char *datagram, struct sockaddr_in lb_adr, int data_len);
 void extract_ip_header(char* buffer);
 void extract_tcp_packet(char* buffer);
 
@@ -132,6 +133,7 @@ int main(int argc, char *argv[])
 	}
 
     char datagram[BUF_SIZE];
+	char data[BUF_SIZE];
 	while (1) {
         int str_len = recvfrom(sock, datagram, BUF_SIZE, 0, NULL, NULL);
 		
@@ -150,11 +152,15 @@ int main(int argc, char *argv[])
         }
 
 		if (tcp->psh && tcp->ack) {
-			printf("data transfered\n");
+			printf("\ndata transfered\n");
 			// TODO: data packet send
-			change_header(datagram, lb_adr);
-			printf("Server에서 SYNACK 헤더 바꾼 것\n");
+			printf("Server에서 RSTACK 받은 것 %d\n", str_len);
 			extract_ip_header(datagram);
+			strcpy(data, datagram + sizeof(struct iphdr) + sizeof(struct tcphdr));
+			printf("receive msg: %s\n", data);
+			// change_header_data(datagram, lb_adr, str_len-40);
+			// printf("\nServer에서 SYNACK 헤더 바꾼 것\n");
+			// extract_ip_header(datagram);
 			// if (sendto(sock, datagram, ip->tot_len, 0, (struct sockaddr *)&lb_adr, sizeof(lb_adr)) < 0) {
 			// 	perror("sendto failed");
 			// }
@@ -195,10 +201,11 @@ void three_way_handshaking_client(int sock, struct sockaddr_in lb_adr, char *dat
 		struct iphdr *ip = (struct iphdr *)datagram;
         struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
 
-		if (ip->saddr != lb_adr.sin_addr.s_addr && tcp->dest != serv_adr.sin_port)
+		if (ip->daddr != lb_adr.sin_addr.s_addr && tcp->dest != serv_adr.sin_port)
 			continue;
 
         if (tcp->syn != 1 && tcp->ack == 1) {
+    		printf("\nServer에서 ACK 받은 것\n");
     		extract_ip_header(datagram);
         //     change_header(datagram, lb_adr); // ACK 패킷을 설정하는 사용자 정의 함수
         //     if (sendto(sock, datagram, strlen(datagram), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -292,6 +299,67 @@ void change_header(char *datagram, struct sockaddr_in lb_adr)
 	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE);
 	
     tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE);
+	ip->check = checksum((__u_short *)datagram, ip->tot_len);
+
+	// set TCP options
+	free(pseudo);
+	free(pseudo_datagram);
+}
+
+void change_header_data(char *datagram, struct sockaddr_in lb_adr, int data_len)
+{
+	struct iphdr *ip = (struct iphdr *)datagram;
+    struct tcphdr *tcp = (struct tcphdr *)(datagram + sizeof(struct iphdr));
+
+    Pseudo *pseudo = (Pseudo *)calloc(sizeof(Pseudo), sizeof(char));
+	char *pseudo_datagram = (char *)malloc(sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE + data_len);
+	if (pseudo == NULL) {
+		perror("malloc: ");
+		exit(EXIT_FAILURE);
+	}
+
+	ip->version = 4;
+	ip->ihl = 5;
+	ip->tos = 0;
+	ip->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE;
+
+	ip->id = ip->id;
+	ip->frag_off = htons(1 << 14);
+	ip->ttl = 64;
+	ip->protocol = IPPROTO_TCP;
+	ip->daddr = ip->saddr;
+	ip->saddr = lb_adr.sin_addr.s_addr;
+
+	tcp->dest = tcp->source;
+	tcp->source = htons(LB_PORT);
+	tcp->seq = tcp->seq;
+	tcp->ack_seq = htonl(ntohs(tcp->seq) + data_len);
+
+	tcp->doff = 5;
+	tcp->res1 = 0;
+	tcp->urg = 0;
+	tcp->ack = 1;
+	tcp->psh = 0;
+	tcp->rst = 0;
+	tcp->syn = 0;
+	tcp->fin = 0;
+
+	tcp->window = htons(5840);		// window size
+	tcp->urg_ptr = 0;
+
+	pseudo->saddr = ip->saddr;
+	pseudo->daddr = ip->daddr;
+	pseudo->placeholder = 0;
+	pseudo->protocol = IPPROTO_TCP;
+	pseudo->tcplen = htons(sizeof(struct tcphdr) + OPT_SIZE + data_len);
+
+    tcp->check = 0;
+    ip->check = 0;
+    
+	memcpy(pseudo_datagram, pseudo, sizeof(Pseudo));
+	memcpy(pseudo_datagram + sizeof(Pseudo), tcp, sizeof(struct tcphdr) + OPT_SIZE + data_len);
+	
+    tcp->check = checksum((__u_short *)pseudo_datagram, sizeof(Pseudo) + sizeof(struct tcphdr) + OPT_SIZE + data_len);
 	ip->check = checksum((__u_short *)datagram, ip->tot_len);
 
 	// set TCP options
