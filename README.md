@@ -1,6 +1,9 @@
 # Raw socket을 이용한 L4 Load Balancer 제작 프로젝트
 2024년도 2학기 IoT 실습 중간 프로젝트
 
+## 진행도
+lb에서 least connection 알고리즘을 사용한 부하 분산 제외 모두 완료  
+
 ## 컴파일 방법
 프로젝트를 컴파일하려면 각 디렉토리(server, client, lb)로 이동한 후 `make` 명령어를 실행하세요.
 
