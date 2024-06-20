@@ -27,7 +27,8 @@ make
 ./server.out <src_ip> <src_port>
 ```
 
-`<src_ip>`를 원하는 소스 IP 주소로, `<src_port>`를 원하는 소스 포트 번호로 대체하세요.
+`<src_ip>`를 원하는 소스 IP 주소로, `<src_port>`를 원하는 소스 포트 번호로 대체하세요.  
+예) ./server.out 192.168.1.100 8080
 
 ### 로드밸런서
 로드밸런서를 실행하려면 다음 명령어를 사용하세요:
@@ -36,11 +37,14 @@ make
 ./lb.out <Source IP> <Source Port> <LB_ALGORITHM>
 ```
 
-`<Source IP>`를 원하는 소스 IP 주소로, `<Source Port>`를 원하는 소스 포트 번호로, `<LB_ALGORITHM>`을 부하 분산 알고리즘으로 대체하세요.
+`<Source IP>`를 원하는 소스 IP 주소로, `<Source Port>`를 원하는 소스 포트 번호로, `<LB_ALGORITHM>`을 로드밸런서 알고리즘으로 대체하세요.  
+예) ./lb.out 192.168.1.101 8080 2
 
+```
 0: ROUND_ROBIN  
 1: LEAST_CONNECTION  
-2: RESOURCE_BASED  
+2: RESOURCE_BASED
+```
 
 ### 클라이언트
 클라이언트를 실행하려면 다음 명령어를 사용하세요:
@@ -49,4 +53,5 @@ make
 ./client.out <Source IP> <Destination IP> <Destination Port>
 ```
 
-`<Source IP>`를 원하는 소스 IP 주소로, `<Destination IP>`를 원하는 대상 IP 주소로, `<Destination Port>`를 원하는 대상 포트 번호로 대체하세요. 
+`<Source IP>`를 원하는 소스 IP 주소로, `<Destination IP>`를 원하는 대상 IP 주소로, `<Destination Port>`를 원하는 대상 포트 번호로 대체하세요.   
+ ./client.out 192.168.1.102 192.168.1.101 8080  
