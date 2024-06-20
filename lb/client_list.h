@@ -5,6 +5,8 @@
 #ifndef __LINKED_LIST_H__
 #define __LINKED_LIST_H__
 
+#define CLNT_NUM 10
+
 typedef struct client_node {
     uint32_t server_index;
     uint32_t addr;

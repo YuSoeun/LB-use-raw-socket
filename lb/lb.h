@@ -3,6 +3,7 @@
 
 #define OPT_SIZE 0
 #define SERVER_NUM 2
+#define CLNT_NUM 10
 #define BUF_SIZE 1024
 
 uint32_t lb_addr;
@@ -15,11 +16,16 @@ typedef enum lb_algo {
 } LB_algo;
 
 typedef struct server_info {
-    uint32_t server_index;
     int sock;
+    uint32_t server_index;
     struct sockaddr_in saddr;
     uint32_t client_count;
 } ServInfo;
+
+typedef struct clnt_info {
+    uint32_t server_index;
+    struct sockaddr_in saddr;
+} ClntInfo;
 
 typedef struct resource {
     uint32_t server_index;
@@ -40,6 +46,7 @@ typedef struct pseudo_header
 unsigned short checksum(__u_short *addr, int len);
 
 struct server_info server_list[SERVER_NUM];
+struct server_info clnt_match_serv[CLNT_NUM];
 struct resource resource_list[SERVER_NUM];
 
 void set_servers();
